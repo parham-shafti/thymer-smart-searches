@@ -1,0 +1,7 @@
+{
+	"ver": 1,
+	"version": "0.2.0",
+	"name": "Saved Searches",
+	"icon": "ti-bookmark",
+	"description": "Save the queries you type into a collection view's filter field under a title, and re-run them from a bookmark button in the view toolbar."
+}
