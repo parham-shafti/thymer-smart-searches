@@ -4,7 +4,7 @@ Saved Searches is a [Thymer](https://thymer.com) plugin that lets you save the q
 
 Thymer already keeps pinned searches for the global Search panel, but the per-view filter field forgets a query the moment you clear it. This plugin remembers the ones worth keeping, so a filter you spent a minute composing is one click away next time.
 
-![Saved Searches open in a collection view, showing searches grouped by view with rename, delete and drag-to-reorder controls](Assets/saved-searches.png)
+![Saved Searches open in a collection view, showing searches grouped into a per-view section and a Whole collection section, each with rename and delete controls](Assets/saved-searches.png)
 
 ## How to use
 
