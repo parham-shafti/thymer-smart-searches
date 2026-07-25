@@ -86,13 +86,15 @@ const CSS = `
 	content: ""; position: absolute; bottom: 0; left: 12px; right: 12px;
 	border-bottom: 1px solid rgba(127,127,127,.14);
 }
-.ssq-list > .ssq-group:last-child .ssq-opt:last-child::after { display: none; }
+/* The last item before the footer gets no divider (the footer's border separates
+   there); it's tagged in _render since the last populated group varies. */
+.ssq-opt.ssq-nodivider::after { display: none; }
 .ssq-sec {
 	padding: 12px 12px 3px; font-size: 10.5px; letter-spacing: .04em;
 	text-transform: uppercase; opacity: .45;
 }
-/* First header sits right under the popup header bar, so it needs less top room. */
-.ssq-list > .ssq-sec:first-child { padding-top: 6px; }
+/* First section sits right under the popup header bar, so it needs less top room. */
+.ssq-list > .ssq-section:first-child .ssq-sec { padding-top: 6px; }
 .ssq-opt {
 	display: flex; align-items: center; gap: 8px;
 	padding: 9px 10px 9px 6px; cursor: pointer; line-height: 16px;
@@ -113,7 +115,6 @@ const CSS = `
 	height: 2px; margin: 1px 10px 1px 12px; border-radius: 2px;
 	background: var(--ed-button-primary-bg, #4caea1);
 }
-.ssq-group.ssq-dragging-in { cursor: grabbing; }
 .ssq-opt:hover:not(.ssq-active) { background: rgba(127,127,127,.12); }
 .ssq-opt.ssq-active { background: var(--cmdpal-selected-bg-color, var(--ed-button-primary-bg, #3aa37f)); color: var(--cmdpal-selected-fg-color, #fff); }
 .ssq-opt.ssq-active .ti, .ssq-opt.ssq-active .ssq-sub { color: var(--cmdpal-selected-fg-color, #fff); opacity: .85; }
@@ -143,12 +144,25 @@ const CSS = `
 	border-top: 1px solid rgba(127,127,127,.18);
 }
 .ssq-hint { padding: 4px 12px 8px; font-size: 11px; opacity: .45; }
+/* Empty here/global sections stay in the DOM as drop targets but are hidden until
+   a drag is in progress, when they appear so a search can be dropped into them. */
+.ssq-empty-zone { display: none; }
+.ssq-pop.ssq-dragging-active .ssq-empty-zone { display: block; }
+.ssq-pop.ssq-dragging-active .ssq-group { min-height: 8px; }
+/* The group currently under the pointer during a drag. */
+.ssq-group.ssq-drop-over { background: rgba(127,127,127,.06); }
+/* Placeholder shown inside an empty drop zone while dragging. */
+.ssq-zone-hint { padding: 9px 12px; font-size: 11px; opacity: .4; font-style: italic; }
 `;
 
 class Plugin extends AppPlugin {
 
 	// Longest query text kept as a title suggestion before it gets truncated.
 	static TITLE_SUGGEST_MAX = 40;
+
+	// A search whose viewId is this is collection-global: it shows in every view of
+	// the collection rather than being tied to one. Real view ids never look like this.
+	static GLOBAL_VIEW = "*";
 
 	onLoad() {
 		// All state as class fields: Thymer can call onUnload() on an instance
@@ -440,9 +454,11 @@ class Plugin extends AppPlugin {
 	_render() {
 		const ctx = this._popCtx;
 		if (!this._pop || !ctx) return;
+		const G = Plugin.GLOBAL_VIEW;
 		const mine = this._items().filter((s) => s.col === ctx.col);
-		const here = mine.filter((s) => s.viewId === ctx.viewId);
-		const elsewhere = mine.filter((s) => s.viewId !== ctx.viewId);
+		const here = mine.filter((s) => s.viewId !== G && s.viewId === ctx.viewId);
+		const global = mine.filter((s) => s.viewId === G);
+		const elsewhere = mine.filter((s) => s.viewId !== G && s.viewId !== ctx.viewId);
 
 		this._pop.innerHTML = "";
 		this._rows = [];
@@ -479,17 +495,28 @@ class Plugin extends AppPlugin {
 			empty.textContent = "No searches saved in " + (ctx.colName || "this collection") + " yet.";
 			list.appendChild(empty);
 		}
-		if (here.length) {
-			// Only worth a section header when there's a second group to tell it from.
-			if (elsewhere.length) this._section(list, ctx.viewName || "This view");
-			const g = this._group(list);
-			here.forEach((s) => this._row(g, s, false));
+
+		// Sections in display order: the current view, then collection-global
+		// searches, then searches belonging to other views. The first two are always
+		// present as drag drop-targets (drop a search into "Whole collection" to make
+		// it global, or into a view's section to move it there); when empty they are
+		// hidden until a drag is in progress. "Other views" is a display bucket only.
+		const sections = [];
+		if (ctx.viewId && ctx.viewId !== G) {
+			sections.push({ kind: "here", label: ctx.viewName || "This view", viewId: ctx.viewId, viewName: ctx.viewName || "", items: here, hint: "Drop here to show only in " + (ctx.viewName || "this view") });
 		}
-		if (elsewhere.length) {
-			this._section(list, here.length ? "Other views" : "Saved in " + (ctx.colName || "this collection"));
-			const g = this._group(list);
-			elsewhere.forEach((s) => this._row(g, s, true));
-		}
+		sections.push({ kind: "global", label: "Whole collection", viewId: G, viewName: "", items: global, hint: "Drop here to show in every view" });
+		if (elsewhere.length) sections.push({ kind: "other", label: "Other views", viewId: "other", items: elsewhere, showView: true });
+
+		// A header would be noise when the current view is the only populated group.
+		const populated = sections.filter((s) => s.items.length);
+		const soloHere = populated.length === 1 && populated[0].kind === "here";
+		sections.forEach((sec) => this._renderSection(list, sec, soloHere));
+
+		// The last real row before the footer gets no divider (empty drop zones carry
+		// no rows, so this is the last item of the last populated section).
+		const rows = list.querySelectorAll(".ssq-group .ssq-opt");
+		if (rows.length) rows[rows.length - 1].classList.add("ssq-nodivider");
 
 		const foot = document.createElement("div");
 		foot.className = "ssq-foot";
@@ -514,9 +541,9 @@ class Plugin extends AppPlugin {
 				this._render();      // back to the list, with the change shown
 				this._position();
 			});
-			this._footOpt(foot, "ti-plus", "Save as a new search…", null, false, () => this._askTitle({ query: q }));
+			this._footOpt(foot, "ti-plus", "Save as a new search…", null, false, () => this._renameDialog({ query: q }));
 		} else {
-			this._footOpt(foot, "ti-plus", "Save current search…", null, false, () => this._askTitle({ query: q }));
+			this._footOpt(foot, "ti-plus", "Save current search…", null, false, () => this._renameDialog({ query: q }));
 		}
 	}
 
@@ -533,20 +560,32 @@ class Plugin extends AppPlugin {
 		this._rows.push({ el, run: onRun });
 	}
 
-	_section(list, label) {
-		const sec = document.createElement("div");
-		sec.className = "ssq-sec";
-		sec.textContent = label;
-		list.appendChild(sec);
-	}
-
-	// A container for one view's rows. Reordering by drag is scoped to a group,
-	// so a search never jumps between views by being dragged.
-	_group(list) {
+	// One section = a header + a group of rows. The group carries `data-view` (a
+	// view id, "*" for global, or "other"), which drag uses to decide where a
+	// dropped search now belongs. Empty here/global sections stay in the DOM as
+	// drop targets but are hidden until a drag reveals them.
+	_renderSection(list, sec, soloHere) {
+		const box = document.createElement("div");
+		box.className = "ssq-section" + (sec.items.length ? "" : " ssq-empty-zone");
+		if (!(soloHere && sec.kind === "here")) {
+			const h = document.createElement("div");
+			h.className = "ssq-sec";
+			h.textContent = sec.label;
+			box.appendChild(h);
+		}
 		const g = document.createElement("div");
 		g.className = "ssq-group";
-		list.appendChild(g);
-		return g;
+		g.setAttribute("data-view", sec.viewId);
+		if (sec.viewName) g.setAttribute("data-viewname", sec.viewName);
+		sec.items.forEach((s) => this._row(g, s, !!sec.showView));
+		if (!sec.items.length && sec.hint) {
+			const p = document.createElement("div");
+			p.className = "ssq-zone-hint";
+			p.textContent = sec.hint;
+			g.appendChild(p);
+		}
+		box.appendChild(g);
+		list.appendChild(box);
 	}
 
 	_row(group, s, showView) {
@@ -569,7 +608,7 @@ class Plugin extends AppPlugin {
 		edit.setAttribute("title", "Rename");
 		edit.addEventListener("click", (e) => {
 			e.stopPropagation();
-			this._askTitle({ query: s.query, editId: s.id, title: s.title });
+			this._renameDialog({ query: s.query, editId: s.id, title: s.title });
 		});
 
 		const del = document.createElement("span");
@@ -590,7 +629,7 @@ class Plugin extends AppPlugin {
 		grip.className = "ssq-grip ti ti-grip-vertical";
 		grip.setAttribute("title", "Drag to reorder");
 		grip.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); });
-		grip.addEventListener("pointerdown", (e) => this._startDrag(e, row, group));
+		grip.addEventListener("pointerdown", (e) => this._startDrag(e, row));
 
 		row.appendChild(grip);
 		row.appendChild(txt);
@@ -610,43 +649,85 @@ class Plugin extends AppPlugin {
 		this._rows.push({ el: row, run });
 	}
 
-	// Pointer-based reorder within a single group (drop line + commit to store).
-	_startDrag(e, row, group) {
+	// Pointer drag that can cross sections. Dropping in another section reassigns
+	// the search's view (a view's section → that view; "Whole collection" → global);
+	// dropping in its own section reorders. Empty here/global sections are revealed
+	// as drop targets for the duration of the drag.
+	_startDrag(e, row) {
 		if (e.button != null && e.button !== 0) return; // left / touch only
 		e.preventDefault();
 		e.stopPropagation();
+		const list = this._pop && this._pop.querySelector(".ssq-list");
+		if (!list) return;
+		this._pop.classList.add("ssq-dragging-active"); // reveal empty drop zones
 		const line = document.createElement("div");
 		line.className = "ssq-drop-line";
-		let moved = false;
+		let moved = false, targetGroup = null;
 		row.classList.add("ssq-dragging");
-		group.classList.add("ssq-dragging-in");
+		const clearOver = () => list.querySelectorAll(".ssq-group.ssq-drop-over").forEach((g) => g.classList.remove("ssq-drop-over"));
 
 		const onMove = (ev) => {
 			const y = ev.clientY;
-			const others = [...group.querySelectorAll(".ssq-opt")].filter((r) => r !== row);
+			const groups = [...list.querySelectorAll(".ssq-group")];
+			if (!groups.length) return;
+			let g = groups.find((gr) => { const r = gr.getBoundingClientRect(); return y >= r.top && y <= r.bottom; });
+			if (!g) g = (y < groups[0].getBoundingClientRect().top) ? groups[0] : groups[groups.length - 1];
+			targetGroup = g;
+			clearOver();
+			g.classList.add("ssq-drop-over");
+			const others = [...g.querySelectorAll(".ssq-opt")].filter((r) => r !== row);
 			let before = null;
 			for (const r of others) {
 				const rect = r.getBoundingClientRect();
 				if (y < rect.top + rect.height / 2) { before = r; break; }
 			}
-			if (before) group.insertBefore(line, before);
-			else group.appendChild(line);
+			const hint = g.querySelector(".ssq-zone-hint");
+			if (before) g.insertBefore(line, before);
+			else if (hint) g.insertBefore(line, hint);
+			else g.appendChild(line);
 			moved = true;
 		};
 		const onUp = () => {
 			document.removeEventListener("pointermove", onMove, true);
 			document.removeEventListener("pointerup", onUp, true);
 			row.classList.remove("ssq-dragging");
-			group.classList.remove("ssq-dragging-in");
-			if (moved && line.parentNode) group.insertBefore(row, line);
+			clearOver();
+			if (this._pop) this._pop.classList.remove("ssq-dragging-active");
+			if (moved && line.parentNode) line.parentNode.insertBefore(row, line);
 			line.remove();
-			if (moved) {
+			if (moved && targetGroup) {
 				this._suppressClickUntil = Date.now() + 350; // swallow the trailing click
-				this._commitOrder(group);
+				this._commitDrag(targetGroup, row);
+			} else {
+				this._render(); this._position(); // nothing changed; drop the revealed zones
 			}
 		};
 		document.addEventListener("pointermove", onMove, true);
 		document.addEventListener("pointerup", onUp, true);
+	}
+
+	// Decide what a drop means from the group it landed in.
+	_commitDrag(targetGroup, row) {
+		const ctx = this._popCtx;
+		const item = this._items().find((x) => x.id === row.getAttribute("data-id"));
+		if (!item || !ctx) { this._render(); this._position(); return; }
+		const tv = targetGroup.getAttribute("data-view");
+
+		// "Other views" is a display bucket, not a reassignment target: reorder if the
+		// row already lives there, otherwise leave it be.
+		if (tv === "other") {
+			if (item.viewId !== Plugin.GLOBAL_VIEW && item.viewId !== ctx.viewId) this._commitOrder(targetGroup);
+			else { this._render(); this._position(); }
+			return;
+		}
+		// Same section → pure reorder.
+		if (tv === item.viewId) { this._commitOrder(targetGroup); return; }
+		// Cross section → reassign the view (or make global), THEN reorder against the
+		// target group's DOM so the item keeps the exact spot it was dropped at rather
+		// than snapping to wherever its array index happens to fall.
+		if (tv === Plugin.GLOBAL_VIEW) { item.viewId = Plugin.GLOBAL_VIEW; item.viewName = ""; }
+		else { item.viewId = tv; item.viewName = targetGroup.getAttribute("data-viewname") || ""; }
+		this._commitOrder(targetGroup);
 	}
 
 	// Reorder the backing array to match the group's new visual order, permuting
@@ -664,9 +745,10 @@ class Plugin extends AppPlugin {
 		this._position();
 	}
 
-	// Inline title field, in place of the popup's list. Used both to name a new
-	// search (opts.query) and to rename an existing one (opts.editId + opts.title).
-	_askTitle(opts) {
+	// Inline title field. Names a new search (opts.query) or renames an existing one
+	// (opts.editId + opts.title). A new search is filed under the current view; move
+	// it to another view or make it global afterwards by dragging it between sections.
+	_renameDialog(opts) {
 		const ctx = this._popCtx;
 		if (!this._pop || !ctx) return;
 		const isRename = opts.editId != null;
@@ -687,7 +769,7 @@ class Plugin extends AppPlugin {
 		input.value = opts.title != null ? opts.title : this._suggestTitle(query, ctx);
 		const foot = document.createElement("div");
 		foot.className = "ssq-hint";
-		foot.textContent = (isRename ? "Enter to rename" : "Enter to save") + " · Esc to cancel";
+		foot.textContent = "Enter to save · Esc to cancel";
 
 		this._pop.appendChild(hint);
 		this._pop.appendChild(sub);
@@ -721,8 +803,7 @@ class Plugin extends AppPlugin {
 					this._loaded = { id, query };
 					this._touch();
 					// Stay open after saving — the popup only closes on an outside
-					// click or when a search is chosen. Back to the list, now with
-					// the new entry in it.
+					// click or when a search is chosen.
 					this._render();
 					this._position();
 				}

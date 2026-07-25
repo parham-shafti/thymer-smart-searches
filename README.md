@@ -16,9 +16,10 @@ Open any collection view. In the toolbar, next to the filter and sort buttons, t
 - **Rename** — hover a row and click the pencil.
 - **Delete** — hover a row and click the trash.
 - **Reorder** — drag the grip on the left of a row to reorder within its group.
+- **Move between views** — drag a search into another view's section to move it there, or into **Whole collection** to make it show in every view. Empty sections appear as drop targets while you drag, so you can always drop into the current view or make a search global even when nothing is there yet. A dropped search keeps the exact spot you release it at.
 - **Clear Search** — the button in the popup's header empties the filter field. Handy on mobile, where the field's own clear button is fiddly to hit.
 
-Saved searches are grouped **per collection**, and within a collection the searches saved in the view you're looking at are listed first, with the rest under **Other views**.
+Saved searches are grouped **per collection**. Within a collection, the searches saved in the view you're looking at are listed first, then any **Whole collection** searches (shown in every view), then the rest under **Other views**.
 
 ## Installation
 

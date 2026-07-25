@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.0 — 2026-07-25
+
+- **Collection-wide searches.** A saved search can now belong to the whole collection instead of a single view, under a "Whole collection" section that shows in every view.
+- **Move searches between views by dragging.** Drag a search into another view's section to move it there, or into "Whole collection" to make it global. Empty sections appear as drop targets while you drag, so you can always drop into the current view or make a search global even when nothing is there yet. Dropped searches keep the exact position you release them at.
+
 ## v1.0.0 — 2026-07-24
 
 First public release.
