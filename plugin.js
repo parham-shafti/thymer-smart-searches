@@ -1033,6 +1033,35 @@ class Plugin extends AppPlugin {
 	_apply(input, query) {
 		input.value = query;
 		input.dispatchEvent(new Event("input", { bubbles: true }));
+		this._resortAfterQuery(input, query);
+	}
+
+	// Thymer bug (2026-10-11, reported): a sorted view keeps its "stable row order"
+	// when the filter changes (`onSetQuery` never resets `stableRowOrder`), so rows
+	// a new filter brings in land next to a neighbour or at the end instead of by
+	// date, and the Resort icon stays hidden. Once the view runs the new query, the
+	// plugin presses Resort for it: the view's own `onResortColumn()`. Only table
+	// views with a sort; internals, so every step is guarded.
+	_resortAfterQuery(input, query) {
+		const want = String(query || "").trim();
+		const token = (this._resortToken = (this._resortToken || 0) + 1);
+		let tries = 0;
+		const tick = () => {
+			if (token !== this._resortToken || window.__ssqLiveGen !== this._gen) return;   // a newer apply took over
+			try {
+				const root = window.g_focusedComponent && window.g_focusedComponent.root;
+				const qi = root && this._queryInputOf(input, root);
+				const vd = qi && qi.parent;
+				const rv = vd && vd.recordsView;
+				if (!rv || typeof rv.onResortColumn !== "function" || !rv.sortColumn || !rv.sortColumn.fieldId) return;
+				if (typeof vd.getQuery === "function" && vd.getQuery() !== want) {
+					if (++tries < 40) setTimeout(tick, 50);   // the view applies typed queries after its own 200 ms
+					return;
+				}
+				rv.onResortColumn();
+			} catch (e) { /* internals moved: the rows simply keep Thymer's order */ }
+		};
+		setTimeout(tick, 50);
 	}
 
 	// Does a query already contain a boolean operator? Such a query needs wrapping
