@@ -31,6 +31,31 @@ Saved searches are grouped **per collection**. Within a collection, the searches
 
 Don't enable Hot Reload — it's a development feature and can leave the plugin in a state where saved data stops persisting.
 
+## The query builder
+
+Build a search from pickers instead of typed syntax. The same text sits behind the **?**
+in the builder's own header.
+
+**Conditions.** A condition is a field, an operator and a value. A box holds one level of
+them, and a level has one joiner: AND (all of them), OR (any of them) or NOT (exclude).
+Set it once; every row in that box follows it.
+
+**Condition groups.** A group is a box inside a level, for when part of the query needs
+the other joiner: "Status is Done AND (Stage is Won OR Stage is Lost)". The group counts
+as one thing. In the filter field it shows as parentheses, added only where they change
+the answer: AND binds tighter than OR, and NOT applies only to the thing right after it,
+so excluding a group always needs them.
+
+**Behaviour.**
+
+- Operators follow the field. On text and page links, `=` means contains. On a choice
+  field it must be one of the options. Set / Not Set ask whether the field has any value
+  at all.
+- The filter updates as you build. Done keeps it, Cancel puts the field back the way it
+  was.
+- Anything the builder cannot express is kept exactly as you wrote it and shown as a chip
+  you can remove.
+
 ## Where your saved searches live
 
 They're stored in the plugin's own configuration, so they sync with your workspace across devices and the web client. A copy is also kept in the browser's local storage as a safety net, and the newer of the two always wins on load.

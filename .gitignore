@@ -1,1 +1,7 @@
 .DS_Store
+# Private working files, kept out of the public repo (same rule as the other plugins):
+HANDOVER.md
+tools/
+design/
+THYMER-BUG-REPORT*.md
+plugin.js.BASELINE
