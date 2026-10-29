@@ -314,45 +314,6 @@ const CSS = `
 }
 .qb-join .qb-sel-label { flex: 0 0 auto; text-align: center; }
 .qb-join .qb-chev { position: absolute; right: 6px; margin-left: 0; }
-/* Date picker — Thymer's OWN datepicker markup, the layout lifted verbatim from
-   Supertask's mini calendar (which documents WHY: .datepicker-compact ships an
-   asymmetric padding-left:10px/right:20px that has to be zeroed, or the grid tilts). */
-.qb-cal { position: fixed; z-index: 100003; width: 254px; padding: 12px;
-	background: var(--cmdpal-bg-color, #212126); color: var(--cmdpal-fg-color, #c4c4c4);
-	border: 1px solid rgba(255,255,255,.1); border-radius: 4px; box-shadow: 0 12px 34px rgba(0,0,0,.55); }
-.qb-cal .datepicker-wrapper { width: auto; padding: 0; }
-.qb-cal .datepicker-calendar { width: auto; padding: 0; }
-.qb-cal .datepicker-header { display: flex; align-items: center; padding: 0 0 0 4px; margin-bottom: 10px; }
-.qb-cal .datepicker-weekdays,
-.qb-cal .datepicker-days {
-	display: grid; grid-template-columns: repeat(7, 25px);
-	gap: 3px 2px; width: max-content; height: auto; min-height: 0; margin: 0 auto;
-}
-.qb-cal .datepicker-weekdays { margin-bottom: 7px; }
-.qb-cal .weekday { width: 25px; text-align: center; padding: 0; font-size: 11px; }
-.qb-cal .day { width: 25px; height: 22px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }
-.qb-cal .day .day-inner { font-size: 12px; width: 18px; height: 18px; padding: 2px; }
-.qb-cal .current-month { font-size: 13px; }
-.qb-cal-nav { cursor: pointer; padding: 0 9px; opacity: .55; user-select: none; }
-.qb-cal-nav:hover { opacity: 1; }
-.qb-cal-input {
-	width: 100%; box-sizing: border-box; border: none; outline: none; margin-bottom: 10px;
-	padding: 7px 8px; font-family: inherit; font-size: var(--text-size-small, 13.3px);
-	background: transparent; color: var(--cmdpal-fg-color, #eee);
-	border-bottom: 1px solid rgba(127,127,127,.18);
-}
-.qb-cal-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.qb-cal-timetoggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.qb-cal-timelbl { cursor: pointer; }
-.qb-cal-time {
-	background: transparent; color: inherit; font-family: inherit; font-size: 12px;
-	border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 1px 4px;
-}
-.qb-cal-clear {
-	margin-left: auto; width: 20px; height: 20px; border-radius: 4px; cursor: pointer; opacity: .5;
-	display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
-}
-.qb-cal-clear:hover { opacity: 1; background: rgba(127,127,127,.22); }
 
 /* A date value: free text plus a calendar button, in one control shell. */
 .qb-val-date { flex: 1 1 auto; min-width: 0; padding-right: 26px; }
@@ -632,6 +593,1527 @@ html[data-device=mobile] .qb-scope-sel { min-width: 0; }
 .qb-joinrow-fill { flex: 1 1 auto; }
 `;
 
+// The full date box for builders' date fields when Supertask cannot open its own
+// (see _qbOpenCal). Generated, never edited here; its CSS is SSDB_CSS below.
+// <<<SHARED date-box — GENERATED from supertask/plugin.js by ../tools/sync-datebox.py. DO NOT EDIT HERE.
+
+// ── SsDateBox: SUPERTASK'S DATE BOX, EXTRACTED VERBATIM, in a FIELD shell
+// (his call 2026-10-29: the full box must be in this plugin for people without
+// Supertask). The host opens it only when Supertask cannot open its own box for
+// a field (no __rsDateBox.pickField), so there is still ONE box on the page.
+// It writes nothing: the picked date goes to the field's onPick, Clear sends
+// null. Repeat and + End date are hidden by the host after it opens.
+const RECUR_DAYNAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const RECUR_MONTHNAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function recurLabel(rule) {
+	const base = recurLabelBase(rule);
+	if (!rule || !rule.f || !rule.u) return base;
+	return base + ' until ' + (rule.u % 100) + ' ' + RECUR_MONTHNAMES[Math.floor(rule.u / 100) % 100 - 1] + ' ' + Math.floor(rule.u / 10000);
+}
+function recurNthOccurrence(rule, anchorYmd, n) {
+	if (!rule || !rule.f || rule.from === 'c' || !anchorYmd || !n || n < 1) return 0;
+	let cur = anchorYmd;
+	for (let i = 1; i < Math.min(n, 500); i++) {
+		const next = recurNext(rule, cur);
+		if (!next || next <= cur) return 0;
+		cur = next;
+	}
+	return cur;
+}
+function rsRuleKey(r) {
+	if (!r || !r.f) return '';
+	const k = { f: r.f, n: r.n || 1 };
+	if (r.from === 'c') k.from = 'c';
+	for (const x of ['wd', 'md', 'mo']) if (Array.isArray(r[x]) && r[x].length) k[x] = r[x].slice().sort((a, b) => a - b);
+	if (r.ord) { k.ord = r.ord; k.od = r.od; }
+	if (r.aftN) k.aftN = r.aftN; else if (r.u) k.u = r.u;
+	if (r.tr) k.tr = r.tr;
+	if (r.nt) k.nt = r.nt;
+	return JSON.stringify(k, Object.keys(k).sort());
+}
+function rsTouchUI() {
+	try {
+		if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+		/* NOT WIDTH (his 2026-10-08 report): Quick Capture's ⌘⇧Y panel is a
+		 * narrow web window driven by a mouse, and the old `innerWidth <= 700`
+		 * fallback gave it the touch box. The phone fallback is Thymer's own
+		 * verdict now, and the capture panel never takes the touch shape. */
+		if (document.body && document.body.classList.contains('qc-panel-mode')) return false;
+		/* data-mobile-type alone is width (phone under 740 px, playbook), so it
+		 * also needs Thymer to call the DEVICE mobile */
+		const h = document.documentElement;
+		return h.getAttribute('data-device') === 'mobile' && h.getAttribute('data-mobile-type') === 'phone';
+	} catch (e) { return false; }
+}
+function recurLabelBase(rule) {
+	if (!rule || !rule.f) return 'Never';
+	if (rule.from === 'c') {
+		const n2 = Math.max(1, rule.n || 1);
+		const unit = { d: 'day', w: 'week', m: 'month', y: 'year' }[rule.f];
+		return (n2 === 1 ? 'Every ' + unit : 'Every ' + n2 + ' ' + unit + 's') + ' after completion';
+	}
+	const n = Math.max(1, rule.n || 1);
+	const every = (unit) => (n === 1 ? 'Every ' + unit : 'Every ' + n + ' ' + unit + 's');
+	const ordPart = () => RECUR_ORDNAMES[String(rule.ord)] + ' '
+		+ (typeof rule.od === 'number' ? RECUR_DAYNAMES[rule.od] : rule.od === 'weekday' ? 'weekday' : rule.od === 'weekendday' ? 'weekend day' : 'day');
+	if (rule.f === 'd') return every('day');
+	if (rule.f === 'w') {
+		const wd = (rule.wd && rule.wd.length ? rule.wd : []).slice().sort((x, y) => x - y);
+		return every('week') + (wd.length ? ' on ' + wd.map((i) => RECUR_DAYNAMES[i]).join(', ') : '');
+	}
+	if (rule.f === 'm') {
+		if (rule.ord) return every('month') + ' on the ' + ordPart();
+		const md = (rule.md && rule.md.length ? rule.md : []).slice().sort((x, y) => x - y);
+		return every('month') + (md.length ? ' on the ' + md.join(', ') : '');
+	}
+	if (rule.f === 'y') {
+		const mo = (rule.mo && rule.mo.length ? rule.mo : []).slice().sort((x, y) => x - y);
+		return every('year') + (mo.length ? ' in ' + mo.map((i) => RECUR_MONTHNAMES[i]).join(', ') : '')
+			+ (rule.ord ? ' on the ' + ordPart() : '');
+	}
+	return 'Never';
+}
+function recurNext(rule, fromYmd) {
+	if (!rule || !rule.f) return 0;
+	const n = Math.max(1, rule.n || 1);
+	const horizon = rule.f === 'y' ? 366 * (n + 1) + 400 : rule.f === 'm' ? 31 * (n + 1) + 400 : 366 * 2;
+	let d = recurYmdToDate(Math.max(fromYmd, rule.a || fromYmd));
+	if (recurDateToYmd(d) <= fromYmd) d.setDate(d.getDate() + 1);
+	for (let i = 0; i < horizon; i++) {
+		const ymd = recurDateToYmd(d);
+		if (ymd > fromYmd && recurMatches(rule, ymd)) return ymd;
+		d.setDate(d.getDate() + 1);
+	}
+	return 0;
+}
+const RECUR_ORDNAMES = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', '-2': 'next to last', '-1': 'last' };
+function recurDateToYmd(d) { return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function recurMatches(rule, ymd) {
+	if (!rule || !rule.f || !rule.a) return false;
+	const n = Math.max(1, rule.n || 1);
+	const d = recurYmdToDate(ymd);
+	const a = recurYmdToDate(rule.a);
+	if (ymd < rule.a) return false;
+
+	const dayOfMonthOk = () => {
+		if (rule.ord) return d.getDate() === recurOrdinalDay(d, rule.ord, rule.od);
+		const md = rule.md && rule.md.length ? rule.md : [a.getDate()];
+		if (md.indexOf(d.getDate()) >= 0) return true;
+		/* a 31st rule still has to fire in a 30-day month, so clamp to the end */
+		const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+		return d.getDate() === last && md.some((x) => x > last);
+	};
+
+	if (rule.f === 'd') {
+		const days = Math.round((d - a) / 86400000);
+		return days >= 0 && days % n === 0;
+	}
+	if (rule.f === 'w') {
+		const wd = rule.wd && rule.wd.length ? rule.wd : [recurWeekday(a)];
+		if (wd.indexOf(recurWeekday(d)) < 0) return false;
+		const weeks = Math.round((recurWeekStart(d) - recurWeekStart(a)) / 604800000);
+		return weeks >= 0 && weeks % n === 0;
+	}
+	if (rule.f === 'm') {
+		const months = (d.getFullYear() - a.getFullYear()) * 12 + (d.getMonth() - a.getMonth());
+		return months >= 0 && months % n === 0 && dayOfMonthOk();
+	}
+	if (rule.f === 'y') {
+		const years = d.getFullYear() - a.getFullYear();
+		if (years < 0 || years % n !== 0) return false;
+		const mo = rule.mo && rule.mo.length ? rule.mo : [a.getMonth()];
+		if (mo.indexOf(d.getMonth()) < 0) return false;
+		return dayOfMonthOk();
+	}
+	return false;
+}
+function recurYmdToDate(n) { return new Date(Math.floor(n / 10000), (Math.floor(n / 100) % 100) - 1, n % 100); }
+function recurOrdinalDay(d, ord, od) {
+	const y = d.getFullYear();
+	const m = d.getMonth();
+	const last = new Date(y, m + 1, 0).getDate();
+	const days = [];
+	for (let day = 1; day <= last; day++) {
+		const wd = recurWeekday(new Date(y, m, day));
+		let ok;
+		if (od === 'day') ok = true;
+		else if (od === 'weekday') ok = wd <= 4;
+		else if (od === 'weekendday') ok = wd >= 5;
+		else ok = wd === od;
+		if (ok) days.push(day);
+	}
+	if (!days.length) return 0;
+	if (ord > 0) return days[ord - 1] || 0;
+	return days[days.length + ord] || 0; /* -1 last, -2 next to last */
+}
+function recurWeekStart(d) {
+	const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+	x.setDate(x.getDate() - recurWeekday(x));
+	return x;
+}
+function recurWeekday(d) { return (d.getDay() + 6) % 7; }
+const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+class SsDateBox {
+	constructor() {
+		this.pop = null; this.repMenu = null; this.rule = null; this.sel = null;
+		this.view = null; this.rangeEnd = null; this.endMode = false;
+		this.popKeys = null; this.outside = null; this.cancelPicker = null;
+		this.showPicker = null; this.nameTpl = null; this.nameBase = null;
+		this.endPickedAt = 0;
+	}
+	toast(m) { try { console.warn('[date box] ' + m); } catch (e) {} }
+	currentDate(t) { return t.cur || null; }
+	targetLabel(t) { return (t && t.label) || 'Date'; }
+	async writeDate(t, dt) { t.onPick(dt); return true; }
+	async clearDate(t) { t.onPick(null); return true; }
+	/* under the field's control, left edges aligned; above it when it does not fit */
+	place(pop, t) {
+		const w = pop.offsetWidth || 320;
+		const h = pop.offsetHeight || 400;
+		const a = t.anchorEl && t.anchorEl.isConnected ? t.anchorEl.getBoundingClientRect() : null;
+		if (!a) {
+			pop.style.left = Math.max(8, (window.innerWidth - w) / 2) + 'px';
+			pop.style.top = '90px';
+			return;
+		}
+		const left = Math.max(8, Math.min(a.left, window.innerWidth - w - 8));
+		let top = a.bottom + 4;
+		if (top + h > window.innerHeight - 8) top = a.top - h - 4;
+		pop.style.left = left + 'px';
+		pop.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
+	}
+	/* The calendar is built from Thymer's OWN datepicker markup and class names
+	 * (.datepicker-wrapper > .datepicker-calendar > .datepicker-header /
+	 * -weekdays / -days, day cells as <div class="day current-month selected
+	 * today"><span class="day-inner">), because those rules live in the app's
+	 * global stylesheet and are not scoped to a shadow root. Reusing them means
+	 * Thymer styles this picker itself — verified live: with the wrapper present
+	 * the cells pick up --day-height, the selected day gets
+	 * --button-primary-bg-color and today gets --text-hilite. Style nothing here
+	 * that Thymer already styles, or the two will drift apart on a theme change.
+	 * `.datepicker-compact` is the in-menu density, which is what the native
+	 * "Assign due date" popup uses. */
+	openPicker(t) {
+		this.closePicker();
+
+		const pop = document.createElement('div');
+		pop.className = 'rs-pop';
+		/* the wrapper lives INSIDE the popup, never on it: .datepicker-compact
+		 * carries width:100% and would otherwise stretch the box to the window */
+		pop.innerHTML = `
+			<div class="rs-head"></div>
+			<input class="rs-input" type="text" spellcheck="false" placeholder="today, Aug 1, monday 3pm">
+			<div class="datepicker-wrapper datepicker-compact"><div class="datepicker-calendar">
+				<div class="datepicker-header">
+					<span class="current-month" style="flex:1"></span>
+					<span style="display:flex; gap:10px">
+						<button class="button-none button-small button-minimal-hover prev-month"><span class="ti ti-chevron-left"></span></button>
+						<button class="button-none button-small button-minimal-hover go-to-today"><span class="ti ti-point"></span></button>
+						<button class="button-none button-small button-minimal-hover next-month"><span class="ti ti-chevron-right"></span></button>
+					</span>
+				</div>
+				<div class="datepicker-weekdays"></div>
+				<div class="datepicker-days"></div>
+				<div class="datepicker-time">
+					<div class="rs-timerow">
+						<div class="rs-timetoggle">
+							<input-switch class="rs-switch switch-compact"></input-switch>
+							<span class="rs-timelbl">Set time</span>
+							<input class="rs-time" type="time" style="display:none">
+						</div>
+						<div class="button-minimal-hover button-none button-small rs-addend">+ End date</div>
+					</div>
+				</div>
+			</div></div>
+			<div class="rs-reprow rs-repbtn">
+				<span style="opacity:.6">Repeat</span>
+				<span class="rs-repval"><span class="rs-repnow"></span><span class="ti ti-chevron-right" style="opacity:.45"></span></span>
+			</div>
+			<div class="rs-custom" style="display:none">
+				<label><span>Frequency</span><span class="rs-sel rs-freq" data-v="d"><span class="rs-sel-lbl">Daily</span><span class="ti ti-chevron-down"></span></span></label>
+				<label><span>Every</span><input class="rs-int" type="number" min="1" max="99" value="1"><span class="rs-unit">days</span></label>
+				<div class="rs-gram rs-gram-w" style="display:none"><div class="rs-days"></div></div>
+				<div class="rs-gram rs-gram-m" style="display:none">
+					<label><input type="radio" name="rs-mmode" value="each" checked>Each</label>
+					<div class="rs-mdays"></div>
+					<label><input type="radio" name="rs-mmode" value="ord">On the</label>
+					<div class="rs-ordrow rs-mordrow">
+						<span class="rs-sel rs-mord" data-v="1"><span class="rs-sel-lbl">first</span><span class="ti ti-chevron-down"></span></span>
+						<span class="rs-sel rs-mod" data-v="day"><span class="rs-sel-lbl">day</span><span class="ti ti-chevron-down"></span></span>
+					</div>
+				</div>
+				<div class="rs-gram rs-gram-y" style="display:none">
+					<div class="rs-months"></div>
+					<label><input type="checkbox" class="rs-ycheck">On the</label>
+					<div class="rs-ordrow rs-yordrow">
+						<span class="rs-sel rs-yordsel" data-v="1"><span class="rs-sel-lbl">first</span><span class="ti ti-chevron-down"></span></span>
+						<span class="rs-sel rs-yod" data-v="day"><span class="rs-sel-lbl">day</span><span class="ti ti-chevron-down"></span></span>
+					</div>
+				</div>
+				<label class="rs-fromrow" title="Day selections always repeat on schedule — Count from applies to plain intervals only"><span>Count From</span><span class="rs-sel rs-from" data-v="a"><span class="rs-sel-lbl">The Due Date</span><span class="ti ti-chevron-down"></span></span></label>
+				<label title="When the SERIES stops. + End date up top is different: it makes each occurrence a date RANGE."><span>End Repeat</span><span class="rs-sel rs-endsel" data-v=""><span class="rs-sel-lbl">Never</span><span class="ti ti-chevron-down"></span></span><input class="rs-cnt" type="number" min="1" max="100" value="3" style="display:none"><input class="rs-until" type="text" spellcheck="false" style="display:none"></label>
+			</div>
+			<div class="rs-foot">
+				<span class="rs-result"></span>
+				<span class="button-none button-small button-minimal-hover rs-clear">Clear</span>
+			</div>`;
+		pop.querySelector('.rs-head').textContent = this.targetLabel(t);
+		/* TOUCH shape. Appended BEFORE the box is measured, so place() sees the
+		 * real height and the box never lands half off-screen. */
+		const rsTouch = rsTouchUI();
+		if (rsTouch) {
+			pop.classList.add('rs-touch');
+			const strip = document.createElement('div');
+			strip.className = 'rs-tbtns';
+			strip.innerHTML = '<div class="rs-tbtn rs-tsave">Save</div><div class="rs-tbtn rs-tclear">Clear</div>';
+			pop.appendChild(strip);
+		}
+		document.body.appendChild(pop);
+		this.shieldKeys(pop);
+		this.pop = pop;
+
+		const input = pop.querySelector('.rs-input');
+		const timeInput = pop.querySelector('.rs-time');
+		const sw = pop.querySelector('.rs-switch');
+		let cur = this.currentDate(t);
+
+		/* Preselect: the date already set, else TODAY — so opening the box and
+		 * pressing Enter schedules today without touching the mouse. */
+		let start = cur || new DateTime(new Date());
+		let sp = start.getParts();
+		/* a TIME-ONLY date (hours without a year) NaN:ed the whole calendar
+		 * ("Invalid Date", his split-view screenshot) — treat it as today at
+		 * that time */
+		let timeOnly = false;
+		if (sp.year === undefined) {
+			const nd = new Date();
+			timeOnly = sp.hours !== undefined;
+			start = timeOnly
+				? DateTime.dateAndTime(nd.getFullYear(), nd.getMonth(), nd.getDate(), sp.hours, sp.minutes || 0, 0)
+				: new DateTime(nd);
+			sp = start.getParts();
+			cur = null;
+		}
+		this.view = { y: sp.year, m: sp.month };
+		this.sel = cur || DateTime.dateOnly(sp.year, sp.month, sp.day);
+		this.endMode = false;
+		this.rangeEnd = cur ? cur.getRangeEnd() : null;
+		/* a time-only line still SHOWS its time (his report 2026-08-28: the
+		 * box opened with Set time off although the row said 11:00 - 12:00) */
+		if ((cur || timeOnly) && sp.hours !== undefined) {
+			sw.checked = true;
+			timeInput.style.display = '';
+			timeInput.value = String(sp.hours).padStart(2, '0') + ':' + String(sp.minutes || 0).padStart(2, '0');
+		}
+
+		let committed = false;
+		const commit = (dt) => {
+			if (committed) return; /* one box, one write */
+			committed = true;
+			/* capture the repeat rule BEFORE closePicker clears the picker state */
+			t.pendingRule = this.rule ? { ...this.rule } : null;
+			/* ONLY when something in the Repeat part changed (his 2026-10-28
+			 * ask, Apple's "this event only"): picking a day writes the date and
+			 * leaves the rule, its anchor and a forward trail's copies alone */
+			t.ruleChanged = rsRuleKey(this.rule) !== this.ruleSnap;
+			t.ruleTouched = t.ruleChanged || !!t.wireTouched;
+			this.closePicker();
+			this.writeDate(t, dt).catch((e) => this.toast('Failed: ' + ((e && e.message) || e)));
+		};
+
+		/* Closing WITHOUT committing: these rows are not editor lines, so
+		 * there is no caret to restore — just close. */
+		this.cancelPicker = () => { this.closePicker(); };
+
+		/* Whatever is picked or typed, the time toggle and the end date are
+		 * re-applied on top, so switching one never silently drops the others. */
+		const compose = () => {
+			if (!this.sel) return null;
+			const p = this.sel.getParts();
+			if (p.year === undefined) return this.sel;
+			let dt = DateTime.dateOnly(p.year, p.month, p.day);
+			if (sw.checked && timeInput.value) {
+				const [hh, mm] = timeInput.value.split(':').map(Number);
+				dt = DateTime.dateAndTime(p.year, p.month, p.day, hh || 0, mm || 0, 0);
+			}
+			if (this.rangeEnd) {
+				let re = this.rangeEnd;
+				try {
+					/* A SAME-DAY end is a DURATION, not a second date: when the
+					 * picked day moves, it moves along (his broken chip
+					 * 2026-08-28, "Fri Aug 28 - Thu Aug 27 22:30": the old end
+					 * survived a new start). A multi-day end stays absolute,
+					 * and an end at or before the start is never written. */
+					const cs = cur && cur.getParts();
+					const rp = re.getParts();
+					if (cs && cs.year !== undefined && rp.year !== undefined
+						&& rp.year === cs.year && rp.month === cs.month && rp.day === cs.day
+						&& (p.year !== rp.year || p.month !== rp.month || p.day !== rp.day)) {
+						re = rp.hours !== undefined
+							? DateTime.dateAndTime(p.year, p.month, p.day, rp.hours, rp.minutes || 0, 0)
+							: DateTime.dateOnly(p.year, p.month, p.day);
+					}
+				} catch (e) {}
+				try {
+					/* SET TIME OFF strips the END's clock too (his report
+					 * 2026-08-29: the start lost its 12:15, the end kept it —
+					 * "Fri Aug 28 - Fri Aug 28 12:15"). Without a clock a
+					 * same-day end is no range at all and is dropped; a
+					 * multi-day end survives as a plain date. */
+					if (!sw.checked) {
+						const rp2 = re.getParts();
+						if (rp2.year !== undefined) {
+							if (rp2.year === p.year && rp2.month === p.month && rp2.day === p.day) re = null;
+							else if (rp2.hours !== undefined) re = DateTime.dateOnly(rp2.year, rp2.month, rp2.day);
+						}
+					}
+				} catch (e) {}
+				if (re && re.toDate() > dt.toDate()) dt.setRangeEnd(re);
+			}
+			return dt;
+		};
+
+		const show = () => {
+			this.renderCal(pop);
+			const dt = compose();
+			const res = pop.querySelector('.rs-result');
+			/* The field itself mirrors the selection (as its PLACEHOLDER, so the
+			 * value stays empty — a real value would stop ←/→ driving the
+			 * calendar and would have to be cleared before typing). He read the
+			 * static syntax hint as a wrong date; the selection is more useful. */
+			if (!input.value) input.placeholder = dt ? this.label(dt) : 'today, Aug 1, monday 3pm';
+			if (this.endMode) {
+				/* the OLD placement of this hint was inside the no-date branch, which
+				 * never runs (today is always preselected) — so arming end-date mode
+				 * gave no feedback at all and read as a dead button (his report) */
+				res.textContent = 'Pick the end date in the calendar';
+				res.classList.add('rs-bad');
+			} else if (dt) {
+				/* the footer mirrors the COMPOSED value, not this.rangeEnd raw:
+				 * compose can drop or move the end (Set time off, a moved day)
+				 * and the old preview kept showing an end that would never be
+				 * written (his 12:15 report, 2026-08-29) */
+				const de = dt.getRangeEnd ? dt.getRangeEnd() : null;
+				res.textContent = this.label(dt) + (de ? ' → ' + this.label(de) : '');
+				res.classList.remove('rs-bad');
+			} else {
+				res.textContent = input.value.trim() ? 'Not a date' : 'Pick a day or type a date';
+				res.classList.add('rs-bad');
+			}
+			const addend = pop.querySelector('.rs-addend');
+			addend.textContent = this.rangeEnd ? '− End date' : '+ End date';
+			addend.classList.toggle('rs-armed', this.endMode);
+			pop.querySelector('.rs-clear').style.display = cur ? '' : 'none';
+			const tclr = pop.querySelector('.rs-tclear');
+			if (tclr) tclr.style.display = cur ? '' : 'none';
+		};
+		this.showPicker = show;
+
+		/* The time switch remembers whether TYPING turned it on. Every keystroke is
+		 * parsed, and a half-typed year reads as a time: "25 aug 2" is 14:00,
+		 * "25 aug 202" is 14:02, and the finished "25 aug 2026" has no time at all,
+		 * yet the switch stayed on at 14:02 (his recording, 2026-10-11). When the
+		 * text no longer holds a time, the switch and clock go back to what they
+		 * were before the text took over (off, or the time already set); one he
+		 * set himself (switch or clock) is his and stays. */
+		let typedTime = false, beforeTyped = null;
+		input.addEventListener('input', () => {
+			const raw = input.value.trim();
+			const parsed = raw ? DateTime.parseDateTimeString(raw)
+				: (cur || DateTime.dateOnly(sp.year, sp.month, sp.day));
+			if (parsed) {
+				const p = parsed.getParts();
+				if (p.year !== undefined) this.view = { y: p.year, m: p.month };
+				/* typing "monday 3pm" should flip the time switch on by itself */
+				if (p.hours !== undefined) {
+					if (raw && !typedTime) beforeTyped = { on: sw.checked, v: timeInput.value };
+					sw.checked = true;
+					timeInput.style.display = '';
+					timeInput.value = String(p.hours).padStart(2, '0') + ':' + String(p.minutes || 0).padStart(2, '0');
+					typedTime = !!raw;
+				} else if (typedTime) {
+					sw.checked = !!(beforeTyped && beforeTyped.on);
+					timeInput.style.display = sw.checked ? '' : 'none';
+					timeInput.value = (beforeTyped && beforeTyped.v) || '';
+					typedTime = false;
+				}
+			}
+			/* Always mirror what is typed. Latching the range end here is what made
+			 * "Aug 5" produce Aug 1–31: the keystrokes pass through "Aug", which
+			 * parses as a whole-month RANGE, and the end date then survived into
+			 * the finished single date. "5 aug" never passes through a range,
+			 * which is why that spelling looked fine. */
+			this.rangeEnd = parsed ? parsed.getRangeEnd() : null;
+			this.sel = parsed;
+			show();
+		});
+		const ARROWS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+		/* Enter and Escape are handled on WINDOW (capture), not on the box: the
+		 * native macOS <select> menu can close WITHOUT firing change (Esc, or
+		 * re-picking the same value), and focus then ends up on <body> — a
+		 * handler on the box never sees those keys, which is exactly "Enter goes
+		 * dead after using Custom". On window it commits no matter where focus
+		 * fell. Removed in closePicker. */
+		this.popKeys = (e) => {
+			if (!this.pop) return;
+			if (e.key !== 'Enter' && e.key !== 'Escape') return;
+			e.stopPropagation();
+			/* an OPEN POPOVER (repeat menu, After-count, Name Copies) is a
+			 * sub-state exactly like endMode: Enter and Escape close just the
+			 * popover, never commit or close the box. The close must happen
+			 * HERE — the stopPropagation above kills the event before the
+			 * popover input's own handler would see it (live-verified: Enter
+			 * in the count popover did nothing at all before this). */
+			if (this.repMenu && this.repMenu.isConnected) {
+				e.preventDefault();
+				try { this.repMenu.remove(); } catch (e2) {}
+				this.repMenu = null;
+				input.focus({ preventScroll: true });
+				return;
+			}
+			this.repMenu = null; /* a closed menu must not eat the next key (live-caught) */
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				/* an armed end-date mode is a sub-state: Escape backs out of IT
+				 * first, and only a second Escape closes the box */
+				if (this.endMode) { this.endMode = false; this.endHover = null; show(); return; }
+				this.cancelPicker();
+				return;
+			}
+			e.preventDefault();
+			const dt = compose();
+			if (dt) commit(dt);
+		};
+		window.addEventListener('keydown', this.popKeys, true);
+
+		/* Enter and Escape live on the window handler above — do NOT also handle
+		 * them here, or one keypress commits twice and the second pass overwrites
+		 * the first with the state the first one already cleared. */
+		input.addEventListener('keydown', (e) => {
+			e.stopPropagation();
+			if (e.key === 'Enter' || e.key === 'Escape') return;
+			/* Arrows walk the calendar: ←/→ a day, ↑/↓ a week. Left and right are
+			 * left alone once something is typed, so the text field stays
+			 * editable; up and down never do anything useful in a one-line field
+			 * so they always drive the calendar. */
+			const step = ARROWS[e.key];
+			if (step === undefined) return;
+			const horizontal = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+			if (horizontal && input.value.length) return;
+			e.preventDefault();
+			const base = this.sel && this.sel.getParts().year !== undefined ? this.sel : new DateTime(new Date());
+			const moved = this.shiftParts(base, step);
+			if (!moved) return;
+			this.sel = moved;
+			const p = moved.getParts();
+			this.view = { y: p.year, m: p.month };
+			show();
+		}, true);
+
+		pop.querySelector('.datepicker-header').addEventListener('click', (e) => {
+			const b = e.target.closest('button');
+			if (!b) return;
+			if (b.classList.contains('go-to-today')) { const d = new Date(); this.view = { y: d.getFullYear(), m: d.getMonth() }; }
+			else {
+				const d = new Date(this.view.y, this.view.m + (b.classList.contains('prev-month') ? -1 : 1), 1);
+				this.view = { y: d.getFullYear(), m: d.getMonth() };
+			}
+			show();
+		});
+
+		pop.querySelector('.datepicker-days').addEventListener('click', (e) => {
+			const cell = e.target.closest('.day[data-date]');
+			if (!cell) return;
+			if (cell.classList.contains('rs-dis')) return; /* not a legal end */
+			const [y, m, d] = cell.getAttribute('data-date').split('-').map(Number);
+			if (this.endMode) {
+				this.rangeEnd = DateTime.dateOnly(y, m - 1, d);
+				this.endMode = false;
+				this.endHover = null;
+				this.endPickedAt = Date.now();
+				show();
+				return;
+			}
+			/* the SECOND click of a double that just picked the end date must not
+			 * fall through here — it would move the START to the end day and
+			 * commit a collapsed range */
+			if (e.detail >= 2 && this.endPickedAt && Date.now() - this.endPickedAt < 500) return;
+			/* Clicking a day only SELECTS it. Committing on the click made Repeat
+			 * unreachable with a mouse — the box was already gone. Enter commits,
+			 * and so does a double click for anyone who never leaves the trackpad. */
+			this.sel = DateTime.dateOnly(y, m - 1, d);
+			show();
+			if (e.detail >= 2) { const dt = compose(); if (dt) commit(dt); }
+		});
+		/* the hover preview drives the calendar only while END mode is armed */
+		pop.querySelector('.datepicker-days').addEventListener('mousemove', (e) => {
+			if (!this.endMode) return;
+			const cell = e.target.closest('.day[data-date]');
+			if (!cell || cell.classList.contains('rs-dis')) return;
+			const [y, m, d] = cell.getAttribute('data-date').split('-').map(Number);
+			const nd = new Date(y, m - 1, d);
+			if (!this.endHover || this.endHover.getTime() !== nd.getTime()) { this.endHover = nd; show(); }
+		});
+		pop.querySelector('.datepicker-days').addEventListener('mouseleave', () => {
+			if (this.endHover) { this.endHover = null; if (this.endMode) show(); }
+		});
+
+		sw.addEventListener('change', () => {
+			typedTime = false;
+			timeInput.style.display = sw.checked ? '' : 'none';
+			if (sw.checked && !timeInput.value) timeInput.value = '09:00';
+			show();
+		});
+		pop.querySelector('.rs-timelbl').addEventListener('click', () => {
+			sw.checked = !sw.checked;
+			sw.dispatchEvent(new Event('change'));
+		});
+		timeInput.addEventListener('input', () => { typedTime = false; show(); });
+		/* + End date arms the mode (and shows it); clicking again disarms; once an
+		 * end is set the same control reads "− End date" and removes it — there
+		 * was previously no way to undo an end date short of retyping. */
+		pop.querySelector('.rs-addend').addEventListener('click', () => {
+			if (this.rangeEnd) { this.rangeEnd = null; this.endMode = false; }
+			else this.endMode = !this.endMode;
+			this.endHover = null;
+			show();
+		});
+		pop.querySelector('.rs-clear').addEventListener('click', () => {
+			this.closePicker();
+			this.clearDate(t).catch((e) => this.toast('Failed: ' + ((e && e.message) || e)));
+		});
+		/* the touch pair does exactly what Enter and Clear do — one commit
+		 * path, one clear path, no second implementation to drift */
+		const tsave = pop.querySelector('.rs-tsave');
+		if (tsave) tsave.addEventListener('click', () => { const dt = compose(); if (dt) commit(dt); });
+		const tclear = pop.querySelector('.rs-tclear');
+		if (tclear) tclear.addEventListener('click', () => {
+			this.closePicker();
+			this.clearDate(t).catch((e) => this.toast('Failed: ' + ((e && e.message) || e)));
+		});
+
+		/* ---- Repeat ---------------------------------------------------- */
+		const repBtn = pop.querySelector('.rs-repbtn');
+		const custom = pop.querySelector('.rs-custom');
+		const freq = pop.querySelector('.rs-freq');
+		const intv = pop.querySelector('.rs-int');
+		const from = pop.querySelector('.rs-from');
+		const UNITS = { d: 'day', w: 'week', m: 'month', y: 'year' };
+		const FREQOPTS = [['d', 'Daily'], ['w', 'Weekly'], ['m', 'Monthly'], ['y', 'Yearly']];
+		const FROMOPTS = [['a', 'The Due Date'], ['c', 'When I Tick It']];
+		const ORDOPTS = [['1', 'first'], ['2', 'second'], ['3', 'third'], ['4', 'fourth'], ['5', 'fifth'], ['-2', 'next to last'], ['-1', 'last']];
+		const ODOPTS = [['day', 'day'], ['weekday', 'weekday'], ['weekendday', 'weekend day'],
+			['0', 'Monday'], ['1', 'Tuesday'], ['2', 'Wednesday'], ['3', 'Thursday'], ['4', 'Friday'], ['5', 'Saturday'], ['6', 'Sunday']];
+		const odParse = (v) => (v === 'day' || v === 'weekday' || v === 'weekendday') ? v : +v;
+		const selVal = (el) => el.getAttribute('data-v');
+		const setSel = (el, v, opts) => {
+			const o = opts.find((x) => x[0] === v) || opts[0];
+			el.setAttribute('data-v', o[0]);
+			el.querySelector('.rs-sel-lbl').textContent = o[1];
+		};
+		/* the three multi-select grids; single letters for days, like Apple's */
+		pop.querySelector('.rs-days').innerHTML = RECUR_DAYNAMES.map((d, i) => '<div class="rs-cell" data-i="' + i + '">' + d[0] + '</div>').join('');
+		let mdHtml = '';
+		for (let d2 = 1; d2 <= 31; d2++) mdHtml += '<div class="rs-cell" data-i="' + d2 + '">' + d2 + '</div>';
+		pop.querySelector('.rs-mdays').innerHTML = mdHtml;
+		pop.querySelector('.rs-months').innerHTML = RECUR_MONTHNAMES.map((m2, i) => '<div class="rs-cell" data-i="' + i + '">' + m2 + '</div>').join('');
+		this.rule = t.kind === 'line' && t.rule ? { ...t.rule } : null;
+		/* what the rule was when the box opened: commit compares against it */
+		this.ruleSnap = rsRuleKey(this.rule);
+		t.wireTouched = false;
+		this.nameTpl = null;
+		/* Repeat is offered on TODO LINES only here (his ruling 2026-08-28):
+		 * without Supertask a page cannot be ticked in the calendar, so a page
+		 * rule could never advance — hide the row instead of lying. Supertask's
+		 * own box covers page repeats whenever that plugin exists. */
+		if (t.kind === 'record') {
+			const rr = pop.querySelector('.rs-reprow');
+			if (rr) rr.style.display = 'none';
+		}
+
+		const paintRepeat = () => {
+			/* the value is ALWAYS shown, "Never" included, and styled as a button so
+			 * it reads as the current setting you can change rather than a label —
+			 * and a real rule lights up in the accent (his request) */
+			const now = pop.querySelector('.rs-repnow');
+			now.textContent = recurLabel(this.rule)
+				+ (this.rule && this.rule.aftN && !this.rule.u ? ', ' + this.rule.aftN + ' times' : '');
+			now.classList.toggle('rs-set', !!(this.rule && this.rule.f));
+			const n = Math.max(1, (this.rule && this.rule.n) || 1);
+			pop.querySelector('.rs-unit').textContent = UNITS[(this.rule && this.rule.f) || 'd'] + (n === 1 ? '' : 's');
+		};
+		const openRepeatMenu = () => {
+			this.refreshMenuColors();
+		document.querySelectorAll('.rs-repmenu').forEach((m) => m.remove());
+			const menu = document.createElement('div');
+			menu.className = 'rs-repmenu';
+			const presets = [['', 'Never'], ['d', 'Every Day'], ['w', 'Every Week'], ['m', 'Every Month'], ['y', 'Every Year']];
+			const cur = this.rule || {};
+			/* a preset row is "on" only for the PLAIN version of its frequency; any
+			 * grammar (weekdays, month days, ordinals, until, interval, mode)
+			 * belongs to Custom */
+			const plain = (cur.n || 1) === 1 && !cur.from && !cur.wd && !cur.md && !cur.mo && !cur.ord && !cur.u;
+			menu.innerHTML = presets.map(([f, lbl]) =>
+				'<div data-f="' + f + '"' + ((cur.f || '') === f && plain ? ' class="rs-on"' : '') + '>' + lbl + '</div>').join('')
+				+ '<div data-f="custom"' + (cur.f && !plain ? ' class="rs-on"' : '')
+				+ ' style="border-top:1px solid rgba(127,127,127,.25); margin-top:3px; padding-top:6px">Custom…</div>';
+			document.body.appendChild(menu);
+			const br = repBtn.getBoundingClientRect();
+			const mh = menu.offsetHeight;
+			const top = br.bottom + 4 + mh > window.innerHeight - 8 ? br.top - mh - 4 : br.bottom + 4;
+			menu.style.top = Math.max(8, top) + 'px';
+			menu.style.left = Math.max(8, Math.min(br.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+			this.repMenu = menu;
+			menu.addEventListener('click', (e) => {
+				const row = e.target.closest('div[data-f]');
+				if (!row) return;
+				const f = row.getAttribute('data-f');
+				if (f === 'custom') {
+					if (!this.rule) this.rule = { f: 'd', n: 1 };
+					custom.style.display = '';
+					primeCustom(this.rule);
+				} else {
+					this.rule = f ? { f, n: 1 } : null;
+					this.nameTpl = null; /* presets discard the custom extras, template included */
+					custom.style.display = 'none';
+				}
+				menu.remove();
+				if (this.repMenu === menu) this.repMenu = null;
+				paintRepeat();
+				/* deliberately NOT re-placing the box: place() re-anchors to the
+				 * caret, and by now the caret element has moved or gone, so the box
+				 * jumped across the screen. Position once, on open, and let it grow
+				 * downward. */
+				this.fit(pop);
+				input.focus({ preventScroll: true });
+			});
+		};
+		repBtn.addEventListener('click', openRepeatMenu);
+
+		const until = pop.querySelector('.rs-until');
+		const mOrdRadio = pop.querySelector('input[name="rs-mmode"][value="ord"]');
+		const mEachRadio = pop.querySelector('input[name="rs-mmode"][value="each"]');
+		const yCheck = pop.querySelector('.rs-ycheck');
+
+		/* Show the grammar section for the chosen frequency, grey the half of the
+		 * monthly/yearly choice that is not active, and hide the lot in
+		 * count-from-completion mode, where the engine ignores day selections. */
+		const updateGrammar = () => {
+			const f = selVal(freq);
+			const fromC = selVal(from) === 'c';
+			pop.querySelector('.rs-gram-w').style.display = !fromC && f === 'w' ? '' : 'none';
+			pop.querySelector('.rs-gram-m').style.display = !fromC && f === 'm' ? '' : 'none';
+			pop.querySelector('.rs-gram-y').style.display = !fromC && f === 'y' ? '' : 'none';
+			pop.querySelector('.rs-mdays').classList.toggle('rs-dim', mOrdRadio.checked);
+			pop.querySelector('.rs-mordrow').classList.toggle('rs-dim', !mOrdRadio.checked);
+			pop.querySelector('.rs-yordrow').classList.toggle('rs-dim', !yCheck.checked);
+			/* Grammar and count-from-completion are mutually exclusive: 'c' counts
+			 * a plain interval from the tick day, so the engine ignores every day
+			 * selection. The grammar already hides in 'c' mode; the mirror image
+			 * is dimming Count from once ANY day selection exists — it is
+			 * effectively locked to "the due date" then. */
+			const hasGrammar = !fromC && (
+				(f === 'w' && !!pop.querySelector('.rs-days .rs-cell.is-on'))
+				|| (f === 'm' && (mOrdRadio.checked || !!pop.querySelector('.rs-mdays .rs-cell.is-on')))
+				|| (f === 'y' && (yCheck.checked || !!pop.querySelector('.rs-months .rs-cell.is-on'))));
+			pop.querySelector('.rs-fromrow').classList.toggle('rs-dim', hasGrammar);
+			this.fit(pop);
+		};
+
+		/* Rebuild the rule from every control. Empty selections are LEFT OUT, so
+		 * the engine falls back to the anchor day, same as before. */
+		const syncCustom = () => {
+			const f = selVal(freq);
+			const rule = { f, n: Math.max(1, parseInt(intv.value, 10) || 1) };
+			if (selVal(from) === 'c') rule.from = 'c';
+			else if (f === 'w') {
+				const wd = [...pop.querySelectorAll('.rs-days .rs-cell.is-on')].map((c) => +c.getAttribute('data-i'));
+				if (wd.length) rule.wd = wd;
+			} else if (f === 'm') {
+				if (mOrdRadio.checked) {
+					rule.ord = +selVal(pop.querySelector('.rs-mord'));
+					rule.od = odParse(selVal(pop.querySelector('.rs-mod')));
+				} else {
+					const md = [...pop.querySelectorAll('.rs-mdays .rs-cell.is-on')].map((c) => +c.getAttribute('data-i'));
+					if (md.length) rule.md = md;
+				}
+			} else if (f === 'y') {
+				const mo = [...pop.querySelectorAll('.rs-months .rs-cell.is-on')].map((c) => +c.getAttribute('data-i'));
+				if (mo.length) rule.mo = mo;
+				if (yCheck.checked) {
+					rule.ord = +selVal(pop.querySelector('.rs-yordsel'));
+					rule.od = odParse(selVal(pop.querySelector('.rs-yod')));
+				}
+			}
+			/* End Repeat: After stores the count (compiled to a date at commit);
+			 * On Date parses the field (typed text goes through Thymer's own
+			 * parser, the picker writes the same format) */
+			until.classList.remove('rs-bad-date');
+			let endMode = selVal(pop.querySelector('.rs-endsel'));
+			if (endMode === 'n' && selVal(from) === 'c') {
+				/* completion-counted rules cannot know future days */
+				setSel(pop.querySelector('.rs-endsel'), '', [['', 'Never'], ['n', 'After'], ['d', 'On Date']]);
+				endMode = '';
+			}
+			if (endMode === 'n') {
+				rule.aftN = Math.max(1, Math.min(100, parseInt(cnt.value, 10) || 1));
+			} else if (endMode === 'd') {
+				const uraw = until.value.trim();
+				if (uraw) {
+					const up = DateTime.parseDateTimeString(uraw);
+					const upp = up && up.getParts();
+					if (upp && upp.year !== undefined) rule.u = upp.year * 10000 + (upp.month + 1) * 100 + upp.day;
+					else until.classList.add('rs-bad-date');
+				}
+			}
+			/* No trail UI here (Supertask's copy machinery, his scope call) —
+			 * but a rule that CARRIES one must not lose it when edited. */
+			if (this.rule && this.rule.tr) rule.tr = this.rule.tr;
+			if (this.rule && this.rule.nt) rule.nt = this.rule.nt;
+			this.rule = rule;
+			paintRepeat();
+			paintEnd();
+			updateGrammar();
+		};
+
+		/* Push an existing rule into every control (the reverse of syncCustom) */
+		const primeCustom = (r) => {
+			setSel(freq, r.f, FREQOPTS); intv.value = r.n || 1; setSel(from, r.from || 'a', FROMOPTS);
+			pop.querySelectorAll('.rs-days .rs-cell').forEach((c) => c.classList.toggle('is-on', !!(r.wd && r.wd.indexOf(+c.getAttribute('data-i')) >= 0)));
+			pop.querySelectorAll('.rs-mdays .rs-cell').forEach((c) => c.classList.toggle('is-on', !!(r.md && r.md.indexOf(+c.getAttribute('data-i')) >= 0)));
+			pop.querySelectorAll('.rs-months .rs-cell').forEach((c) => c.classList.toggle('is-on', !!(r.mo && r.mo.indexOf(+c.getAttribute('data-i')) >= 0)));
+			mOrdRadio.checked = !!r.ord && r.f === 'm';
+			mEachRadio.checked = !mOrdRadio.checked;
+			yCheck.checked = !!r.ord && r.f === 'y';
+			if (r.ord) { setSel(pop.querySelector('.rs-mord'), String(r.ord), ORDOPTS); setSel(pop.querySelector('.rs-yordsel'), String(r.ord), ORDOPTS); }
+			if (r.od !== undefined) { setSel(pop.querySelector('.rs-mod'), String(r.od), ODOPTS); setSel(pop.querySelector('.rs-yod'), String(r.od), ODOPTS); }
+			const endMode2 = r.aftN ? 'n' : (r.u ? 'd' : '');
+			until.value = endMode2 === 'd' && r.u ? (r.u % 100) + ' ' + RECUR_MONTHNAMES[Math.floor(r.u / 100) % 100 - 1] + ' ' + Math.floor(r.u / 10000) : '';
+			until.classList.remove('rs-bad-date');
+			cnt.value = r.aftN || 3;
+			setSel(pop.querySelector('.rs-endsel'), endMode2, [['', 'Never'], ['n', 'After'], ['d', 'On Date']]);
+			paintEnd();
+			updateGrammar();
+		};
+
+		/* Frequency, Count-from and the ordinal pickers are OUR dropdowns, not
+		 * <select>: the native macOS menu renders at the system font size
+		 * (unstylable — he reported the options too small) and can close without
+		 * firing change, stranding focus outside the box, which was the original
+		 * Enter-dead bug. A plugin menu keeps focus, keys and typography
+		 * in-house. Enter always commits regardless of focus (window handler). */
+		const wireSel = (el, opts) => el.addEventListener('click', () =>
+			this.openSelMenu(el, opts, selVal(el), (v) => { setSel(el, v, opts); syncCustom(); }));
+		wireSel(freq, FREQOPTS);
+		wireSel(from, FROMOPTS);
+		/* End Repeat is Apple's shape (his screenshots): Never / After n times /
+		 * On Date with a real date picker. After compiles to a date at COMMIT
+		 * (occurrence #n from the committed anchor, engine-computed) so no
+		 * counters ever need mutating on ticks; completion-counted rules
+		 * cannot know future days, so After is absent from the menu there. */
+		const endSel = pop.querySelector('.rs-endsel');
+		const cnt = pop.querySelector('.rs-cnt');
+		const ENDOPTS_ALL = [['', 'Never'], ['n', 'After'], ['d', 'On Date']];
+		/* the ROW never grows (the Is-set-to lesson): the chip carries the
+		 * whole value ("After 3 times" / "9 Sep 2026") and picking After or
+		 * On Date opens a POPOVER over the field — a count box or the month
+		 * picker — instead of squeezing inputs into the row */
+		const paintEnd = () => {
+			const v = selVal(endSel);
+			const l = endSel.querySelector('.rs-sel-lbl');
+			if (v === 'n') l.textContent = 'After ' + (parseInt(cnt.value, 10) || 3) + ' times';
+			else if (v === 'd') l.textContent = until.value.trim() || 'On Date';
+			else l.textContent = 'Never';
+		};
+		const endApply = (v) => {
+			setSel(endSel, v, ENDOPTS_ALL);
+			if (v === 'n') {
+				this.openCountPop(endSel, parseInt(cnt.value, 10) || 3, (n2) => {
+					cnt.value = n2;
+					syncCustom();
+				});
+			} else if (v === 'd') {
+				if (!until.value.trim()) {
+					const b = (this.sel || new DateTime(new Date())).getParts();
+					const d2 = new Date(b.year, b.month + 1, b.day);
+					until.value = d2.getDate() + ' ' + RECUR_MONTHNAMES[d2.getMonth()] + ' ' + d2.getFullYear();
+				}
+				const up = DateTime.parseDateTimeString(until.value.trim());
+				const upp = up && up.getParts();
+				this.openMiniCal(endSel, upp && upp.year !== undefined ? upp : null, (y2, m2, d3) => {
+					until.value = d3 + ' ' + RECUR_MONTHNAMES[m2] + ' ' + y2;
+					syncCustom();
+				});
+			} else {
+				until.value = '';
+				until.classList.remove('rs-bad-date');
+			}
+			syncCustom();
+		};
+		endSel.addEventListener('click', () => {
+			const opts = selVal(from) === 'c' ? ENDOPTS_ALL.filter((o) => o[0] !== 'n') : ENDOPTS_ALL;
+			this.openSelMenu(endSel, opts, selVal(endSel), endApply);
+		});
+		wireSel(pop.querySelector('.rs-mord'), ORDOPTS);
+		wireSel(pop.querySelector('.rs-mod'), ODOPTS);
+		wireSel(pop.querySelector('.rs-yordsel'), ORDOPTS);
+		wireSel(pop.querySelector('.rs-yod'), ODOPTS);
+		for (const sel of ['.rs-days', '.rs-mdays', '.rs-months']) {
+			pop.querySelector(sel).addEventListener('click', (e) => {
+				const c = e.target.closest('.rs-cell');
+				if (!c) return;
+				c.classList.toggle('is-on');
+				syncCustom();
+			});
+		}
+		mOrdRadio.addEventListener('change', syncCustom);
+		mEachRadio.addEventListener('change', syncCustom);
+		yCheck.addEventListener('change', syncCustom);
+		intv.addEventListener('input', syncCustom);
+		until.addEventListener('input', syncCustom);
+		/* Prime the Custom fields but keep the panel CLOSED. Opening it on load
+		 * changed the box height after place() had run, which is why reopening a
+		 * line that already had a rule made the box jump, and the extra fields
+		 * took the focus off the text input so nothing could be typed. The rule is
+		 * already summarised on the Repeat row; the panel is for editing it. */
+		if (this.rule) primeCustom(this.rule);
+		paintRepeat();
+
+		show();
+		this.place(pop, t);
+		this.outside = (e) => {
+			if (e.target.closest && e.target.closest('.rs-repmenu')) return; /* the menu is a body child now */
+			/* a click anywhere else closes the repeat menu — without this, clicking
+			 * back into the calendar left the menu floating over the box */
+			if (this.repMenu) { try { this.repMenu.remove(); } catch (e2) {} this.repMenu = null; }
+			if (this.pop && !this.pop.contains(e.target)) this.closePicker();
+		};
+		setTimeout(() => document.addEventListener('pointerdown', this.outside, true), 0);
+		/* focus last, and once more on the next frame: laying out the repeat row
+		 * can move focus, and a box you cannot type into is worse than useless */
+		/* On touch the box must NOT grab the field: the keyboard would slam up
+		 * over the calendar before a single day has been looked at. Tapping the
+		 * field is what asks for it, and then the box climbs above the keyboard. */
+		if (!rsTouch) {
+			input.focus({ preventScroll: true });
+			requestAnimationFrame(() => { if (this.pop === pop && document.activeElement !== input) input.focus({ preventScroll: true }); });
+		} else if (window.visualViewport) {
+			const vv = window.visualViewport;
+			const reanchor = () => {
+				/* self-removing: the box outlives no listener of its own */
+				if (!document.body.contains(pop)) {
+					vv.removeEventListener('resize', reanchor);
+					vv.removeEventListener('scroll', reanchor);
+					return;
+				}
+				const h = pop.offsetHeight;
+				pop.style.top = Math.max(vv.offsetTop + 8, vv.offsetTop + vv.height - h - 8) + 'px';
+			};
+			input.addEventListener('focus', () => {
+				vv.addEventListener('resize', reanchor);
+				vv.addEventListener('scroll', reanchor);
+				setTimeout(reanchor, 250);
+			});
+		}
+	}
+	/* A small dropdown of options under an anchor, on the repeat menu's surface
+	 * (body-parented and fixed for the same overflow:hidden reason). Used by the
+	 * Frequency and Count-from controls in place of a native <select>. */
+	openSelMenu(anchor, items, cur, onPick) {
+		this.refreshMenuColors();
+		document.querySelectorAll('.rs-repmenu').forEach((m) => m.remove());
+		const menu = document.createElement('div');
+		menu.className = 'rs-repmenu';
+		menu.innerHTML = items.map(([v, lbl]) =>
+			'<div data-v="' + v + '"' + (v === cur ? ' class="rs-on"' : '') + '>' + lbl + '</div>').join('');
+		document.body.appendChild(menu);
+		const br = anchor.getBoundingClientRect();
+		const mh = menu.offsetHeight;
+		const top = br.bottom + 4 + mh > window.innerHeight - 8 ? br.top - mh - 4 : br.bottom + 4;
+		menu.style.top = Math.max(8, top) + 'px';
+		menu.style.left = Math.max(8, Math.min(br.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+		this.repMenu = menu;
+		menu.addEventListener('click', (e) => {
+			const row = e.target.closest('div[data-v]');
+			if (!row) return;
+			menu.remove();
+			if (this.repMenu === menu) this.repMenu = null;
+			onPick(row.getAttribute('data-v'));
+		});
+	}
+
+	/* Native's own day-cell shape, so native's CSS lights it up:
+	 * <div class="day current-month|prev-month|next-month [today] [selected]
+	 * [inrange]" data-date="YYYY-MM-DD"><span class="day-inner">N</span></div> */
+	/* A compact month picker for End Repeat: On Date — Thymer's OWN datepicker
+	 * markup (wrapper INSIDE the popover, the doctrine) so the app styles and
+	 * themes it. Carries .rs-repmenu so the box's outside-click handler
+	 * treats it as one of ours. */
+	openMiniCal(anchorEl, startParts, onPick) {
+		this.refreshMenuColors();
+		document.querySelectorAll('.rs-minical').forEach((m) => m.remove());
+		const box = document.createElement('div');
+		box.className = 'rs-repmenu rs-minical';
+		const now = new Date();
+		let vy = startParts ? startParts.year : now.getFullYear();
+		let vm = startParts ? startParts.month : now.getMonth();
+		const selYmd = startParts ? startParts.year * 10000 + (startParts.month + 1) * 100 + startParts.day : 0;
+		const paint = () => {
+			const first = new Date(vy, vm, 1);
+			const lead = (first.getDay() + 6) % 7;
+			let days = '';
+			for (let i = 0; i < 42; i++) {
+				const d = new Date(vy, vm, 1 - lead + i);
+				const ymd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+				const cls = ['day', d.getMonth() === vm ? 'current-month' : (d < first ? 'prev-month' : 'next-month')];
+				if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) cls.push('today');
+				if (ymd === selYmd) cls.push('selected');
+				days += '<div class="' + cls.join(' ') + '" data-ymd="' + ymd + '"><span class="day-inner">' + d.getDate() + '</span></div>';
+			}
+			box.innerHTML = '<div class="datepicker-wrapper datepicker-compact"><div class="datepicker-calendar">'
+				+ '<div class="datepicker-header"><span class="current-month" style="flex:1">'
+				+ new Date(vy, vm, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+				+ '</span><span class="rs-mc-nav rs-mc-prev">‹</span><span class="rs-mc-nav rs-mc-next">›</span></div>'
+				+ '<div class="datepicker-weekdays">' + DOW.map((d) => '<div class="weekday">' + d + '</div>').join('') + '</div>'
+				+ '<div class="datepicker-days">' + days + '</div>'
+				+ '</div></div>';
+		};
+		paint();
+		document.body.appendChild(box);
+		/* SELF-SQUARING: measure the real rendered content (fonts, UI zoom
+		 * and app CSS all bend static values — seven rounds proved it) and
+		 * set an exact square with the leftover distributed as equal air. */
+		const squareUp = () => {
+			try {
+				const days2 = box.querySelector('.datepicker-days');
+				const header2 = box.querySelector('.datepicker-header');
+				const cells2 = box.querySelectorAll('.datepicker-days .day');
+				if (!days2 || !header2 || !cells2.length) return;
+				box.style.width = 'auto';
+				box.style.padding = '0';
+				const dr = days2.getBoundingClientRect();
+				const hr = header2.getBoundingClientRect();
+				const lastR = cells2[cells2.length - 1].getBoundingClientRect();
+				const cW = dr.width;
+				const cH = lastR.bottom - hr.top;
+				const air = 17; /* his call: ~85% of the first square */
+				const side = Math.max(cW, cH) + air * 2;
+				box.style.width = side + 'px';
+				box.style.height = side + 'px';
+				box.style.paddingLeft = box.style.paddingRight = ((side - cW) / 2) + 'px';
+				box.style.paddingTop = ((side - cH) / 2) + 'px';
+				box.style.paddingBottom = '0';
+				box.style.boxSizing = 'border-box';
+			} catch (e) {}
+		};
+		squareUp();
+		/* ABOVE the anchor row and horizontally inside the box frame (his
+		 * call — dropping below the field pushed it to the screen's bottom) */
+		const r = anchorEl.getBoundingClientRect();
+		const frame = this.pop ? this.pop.getBoundingClientRect() : null;
+		let top = r.top - box.offsetHeight - 6;
+		if (top < 8) top = Math.min(r.bottom + 4, window.innerHeight - box.offsetHeight - 8);
+		let left = r.left;
+		if (frame) left = Math.max(frame.left + 4, Math.min(left, frame.right - box.offsetWidth - 4));
+		box.style.top = Math.max(8, top) + 'px';
+		box.style.left = Math.max(8, Math.min(left, window.innerWidth - box.offsetWidth - 8)) + 'px';
+		const outside = (e) => { if (!box.contains(e.target) && e.target !== anchorEl) close(); };
+		const close = () => { document.removeEventListener('pointerdown', outside, true); box.remove(); };
+		setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+		box.addEventListener('click', (e) => {
+			const nav = e.target.closest('.rs-mc-nav');
+			if (nav) {
+				vm += nav.classList.contains('rs-mc-next') ? 1 : -1;
+				if (vm < 0) { vm = 11; vy--; }
+				if (vm > 11) { vm = 0; vy++; }
+				paint();
+				squareUp();
+				return;
+			}
+			const day = e.target.closest('.day');
+			if (day) {
+				const ymd = +day.getAttribute('data-ymd');
+				close();
+				onPick(Math.floor(ymd / 10000), Math.floor(ymd / 100) % 100 - 1, ymd % 100);
+			}
+		});
+	}
+	/* the After-count popover: writes through live, Enter or an outside
+	 * click closes — the chip label always mirrors the value */
+	openCountPop(anchorEl, current, onSet) {
+		this.refreshMenuColors();
+		document.querySelectorAll('.rs-repmenu').forEach((m) => m.remove());
+		const box = document.createElement('div');
+		box.className = 'rs-repmenu rs-countpop';
+		box.innerHTML = '<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;">After <input class="rs-cnt" type="number" min="1" max="100" value="' + (current || 3) + '"> times</label>';
+		document.body.appendChild(box);
+		this.shieldKeys(box);
+		const r = anchorEl.getBoundingClientRect();
+		const top = r.bottom + 4 + box.offsetHeight > window.innerHeight - 8 ? r.top - box.offsetHeight - 4 : r.bottom + 4;
+		box.style.top = Math.max(8, top) + 'px';
+		box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - box.offsetWidth - 8)) + 'px';
+		this.repMenu = box;
+		const input = box.querySelector('input');
+		this.reclaimFocus(input, box);
+		input.focus();
+		input.select();
+		input.addEventListener('input', () => onSet(Math.max(1, Math.min(100, parseInt(input.value, 10) || 1))));
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				e.stopPropagation();
+				box.remove();
+				if (this.repMenu === box) this.repMenu = null;
+			}
+		});
+	}
+	/* anchor the pending rule on the committed day and compile "After n
+	 * times" into its concrete end date (occurrence #1 = the anchor) */
+	finalizeRule(pending, anchorYmd) {
+		if (!pending) return null;
+		const rule = { ...pending, a: anchorYmd };
+		delete rule.mv; /* a new anchor: nothing was moved off it */
+		if (rule.aftN) {
+			const nth = recurNthOccurrence(rule, anchorYmd, rule.aftN);
+			if (nth) rule.u = nth;
+		}
+		/* an UNBOUNDED forward trail must never be stored (his call
+		 * 2026-08-10: without an End Repeat it would lay out forever) — the
+		 * UI auto-arms an End Repeat when the trail is picked, so this is
+		 * the belt-and-braces layer for typed-empty Until and old rules */
+		if (rule.tr === 'f' && !rule.u) {
+			delete rule.tr;
+			this.toast('Forward trail needs an End Repeat — trail dropped.');
+		}
+		return rule;
+	}
+	renderCal(pop) {
+		const { y, m } = this.view;
+		pop.querySelector('.current-month').textContent =
+			new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+		pop.querySelector('.datepicker-weekdays').innerHTML =
+			DOW.map((d) => '<div class="weekday">' + d + '</div>').join('');
+
+		const first = new Date(y, m, 1);
+		const lead = (first.getDay() + 6) % 7; // JS weeks start Sunday, ours Monday
+		const today = new Date();
+		const same = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+		const selD = this.sel && this.sel.getParts().year !== undefined ? this.sel.toDate() : null;
+		/* while END mode is armed the HOVERED day previews the range, so the
+		 * span is visible as you drag it out (his ask 2026-08-29) */
+		const endD = this.rangeEnd ? this.rangeEnd.toDate()
+			: (this.endMode && this.endHover ? this.endHover : null);
+		const sel0 = selD ? new Date(selD.getFullYear(), selD.getMonth(), selD.getDate()) : null;
+
+		let html = '';
+		for (let i = 0; i < 42; i++) {
+			const d = new Date(y, m, 1 - lead + i);
+			const cls = ['day', d.getMonth() === m ? 'current-month' : (d < first ? 'prev-month' : 'next-month')];
+			if (same(d, today)) cls.push('today');
+			if (same(d, selD) || same(d, endD)) cls.push('selected');
+			if (selD && endD && d > selD && d < endD) cls.push('inrange');
+			if (selD && endD) {
+				if (same(d, selD)) cls.push('rs-r0');
+				if (same(d, endD)) cls.push('rs-r1');
+			}
+			/* picking an END: a day before the start is not a legal end —
+			 * native greys it and refuses the click; ours let it through and
+			 * BACKWARDS ranges were born (his report 2026-08-29) */
+			if (this.endMode && sel0 && d < sel0) cls.push('rs-dis');
+			const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+			html += '<div class="' + cls.join(' ') + '" data-date="' + iso + '"><span class="day-inner">' + d.getDate() + '</span></div>';
+		}
+		pop.querySelector('.datepicker-days').innerHTML = html;
+	}
+	/* Keep the box on screen after it changes height, WITHOUT re-anchoring it —
+	 * only the top edge moves, and only if it would otherwise hang off. */
+	fit(pop) {
+		const r = pop.getBoundingClientRect();
+		if (r.bottom <= window.innerHeight - 8) return;
+		pop.style.top = Math.max(8, window.innerHeight - 8 - r.height) + 'px';
+	}
+
+	/* THE FREEZE FIX, from the bundle this time, not a guess: Thymer's key
+	 * dispatcher (EL) is registered on WINDOW BUBBLE — its only registration
+	 * — and forwards every unmatched key to g_focusedComponent.onKeyDown.
+	 * Clicks in plugin UI map to NO Thymer component (Li returns null), so
+	 * the component focus stays parked on e.g. the collection TABLE VIEW,
+	 * whose handler eats Space and letters even while a plugin input holds
+	 * DOM focus. That is why the template field froze in collection views
+	 * but never on lines. Stopping propagation at our own surface starves
+	 * the bubble dispatcher; the browser default still runs (text lands in
+	 * the field), and popKeys is window CAPTURE so Enter/Escape handling is
+	 * unaffected. CDP typing bypassed all of this, which is how two rounds
+	 * shipped "verified" — the v0.7.1 testing trap, honored at last. */
+	/* Menu surface colours, recomputed from the LIVE background: his exact
+	 * #2A2A31 / #D5D4D4 on dark themes, and on light ones a surface a touch
+	 * darker than the page with the theme's own foreground (the hex would be
+	 * a black slab on white). Cheap enough to call on every popover open. */
+	refreshMenuColors() {
+		try {
+			/* THE DISCRIMINATOR IS THE CLASS, not a sampled colour (live-read
+			 * 2026-08-10). Two traps killed the first attempt: `document.body`
+			 * has NO background at all (`rgba(0,0,0,0)`), so a luminance test
+			 * on it always answered "dark" and the menus stayed dark on light
+			 * themes; and `--cmdpal-bg-color` is `color(display-p3 .129 …)` on
+			 * his dark theme, which no naive digit-parse survives either. The
+			 * app stamps `is-dark` / `is-light` on <html> and reruns it on
+			 * every theme change — that is the signal. */
+			const cl = document.documentElement.classList;
+			const dark = cl.contains('is-dark') || (!cl.contains('is-light') && !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches));
+			document.documentElement.style.setProperty('--rs-menu-bg', dark
+				? '#2A2A31'
+				: 'color-mix(in srgb, var(--cmdpal-bg-color, #fff) 94%, var(--cmdpal-fg-color, #000))');
+			document.documentElement.style.setProperty('--rs-menu-fg', dark
+				? '#D5D4D4'
+				: 'var(--cmdpal-fg-color, var(--text-color, #333))');
+		} catch (e) {}
+	}
+
+	shieldKeys(el) {
+		for (const t of ['keydown', 'keypress', 'keyup']) {
+			el.addEventListener(t, (e) => {
+				const n = e.target;
+				if (n && (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA')) e.stopPropagation();
+			});
+		}
+	}
+
+	/* belt-and-braces for the popover fields: if something yanks DOM focus
+	 * to <body> or Thymer's virtual input while the popover is open, take
+	 * it back — but never from a legitimate focus move into other UI */
+	reclaimFocus(input, box) {
+		input.addEventListener('blur', () => {
+			setTimeout(() => {
+				if (!document.body.contains(box)) return;
+				const ae = document.activeElement;
+				if (!ae || ae === document.body || ae.id === 'virtualinput-wrapper') input.focus();
+			}, 0);
+		});
+	}
+	closePicker() {
+		if (this.popKeys) { window.removeEventListener('keydown', this.popKeys, true); this.popKeys = null; }
+		if (this.outside) { document.removeEventListener('pointerdown', this.outside, true); this.outside = null; }
+		if (this.pop) { try { this.pop.remove(); } catch (e) {} this.pop = null; }
+		this.refreshMenuColors();
+		document.querySelectorAll('.rs-repmenu').forEach((m) => m.remove());
+		this.repMenu = null;
+		this.sel = this.view = this.rangeEnd = this.endHover = this.showPicker = this.cancelPicker = null;
+		this.nameTpl = this.nameBase = null;
+		this.endMode = false;
+	}
+	shiftParts(dt, days) {
+		const p = dt.getParts();
+		if (p.year === undefined) return null; // time-only tag: nothing to move
+		const d = new Date(p.year, p.month, p.day);
+		d.setDate(d.getDate() + days);
+		if (p.hours === undefined) return DateTime.dateOnly(d.getFullYear(), d.getMonth(), d.getDate());
+		return DateTime.dateAndTime(d.getFullYear(), d.getMonth(), d.getDate(), p.hours, p.minutes || 0, p.seconds || 0);
+	}
+	/* Show the year whenever it is not the current one. Thymer's parser rolls a
+	 * bare "Aug 5" forward to NEXT year once that day has passed, so without this
+	 * the preview reads "Thu 5 Aug" for a date twelve months out. */
+	label(dt) {
+		const d = dt.toDate();
+		const parts = dt.getParts();
+		const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+		if (parts.year !== undefined && parts.year !== new Date().getFullYear()) opts.year = 'numeric';
+		const day = d.toLocaleDateString(undefined, opts);
+		if (parts.hours === undefined) return day;
+		return day + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+	}
+}
+// >>>SHARED date-box
+
+const SSDB_CSS = `
+/* <<<SHARED date-box CSS — GENERATED from supertask/plugin.js. DO NOT EDIT HERE. */
+/* ── SsDateBox: Supertask's picker CSS, EXTRACTED VERBATIM; injected only
+   while Supertask is absent. */
+.rs-pop {
+	position: fixed; z-index: 99999; width: 320px;
+	background: var(--cmdpal-bg-color, var(--app-bg, #26262b));
+	color: var(--cmdpal-fg-color, var(--text-color, #ddd));
+	border: 1px solid rgba(127,127,127,.4);
+	border-radius: var(--radius-larger, 10px);
+	box-shadow: 0 16px 48px rgba(0,0,0,.5);
+	overflow: hidden; font-size: 13px; padding-bottom: 2px;
+}
+.rs-head {
+	padding: 8px 12px; border-bottom: 1px solid rgba(127,127,127,.18);
+	user-select: none; font-weight: 600; opacity: .75; font-size: 11.5px;
+	text-transform: uppercase; letter-spacing: .04em;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rs-input {
+	width: 100%; box-sizing: border-box; border: none; outline: none;
+	padding: 9px 12px; font-size: var(--text-size-small, .875rem);
+	font-family: inherit; background: transparent;
+	color: var(--cmdpal-fg-color, var(--text-color, #eee));
+	border-bottom: 1px solid rgba(127,127,127,.18);
+}
+/* END-DATE MODE (his asks 2026-08-29): the span you drag out is VISIBLE —
+ * the hovered-to days band together — and a day before the start is greyed
+ * and refuses the click, exactly like native. */
+.rs-pop .day { position: relative; }
+.rs-pop .day .day-inner { position: relative; }
+/* the band is CONTINUOUS and EXACTLY the endpoint chips' height (his calls
+ * 2026-08-29). The chip's own padding box is SHORTER than it looks (its
+ * ~1.65px borders — measured 16.7 vs 20), but the .day CELL is exactly the
+ * chip's border-box height, so the band hangs off the cell with inset 0
+ * vertically and bleeds sideways across the grid gaps on an OPAQUE tint
+ * (accent mixed into the surface, so overlaps cannot double up). The
+ * endpoints' solid chips paint above it. */
+.rs-pop .day.rs-r0::before, .rs-pop .day.inrange::before, .rs-pop .day.rs-r1::before {
+	content: ''; position: absolute; z-index: 0; top: 0; bottom: 0; left: -7px; right: -7px;
+	background: color-mix(in srgb, var(--color-primary-500, #3aa37f) 16%, var(--cmdpal-bg-color, #26262b));
+}
+/* the ends ANCHOR UNDER the endpoint chips (left/right 50%), so nothing
+ * pokes out before the start or after the end, and the radius is the house
+ * 4px on the sliver that can show (his call 2026-08-29) */
+.rs-pop .day.rs-r0::before { left: 50%; border-radius: 4px 0 0 4px; }
+.rs-pop .day.rs-r1::before { right: 50%; border-radius: 0 4px 4px 0; }
+/* the app has its OWN .inrange styling (native range support) — under our
+ * band it drew a second box (his report 2026-08-29). One drawing: ours. */
+.rs-pop .day.inrange { background: transparent; }
+.rs-pop .day.inrange .day-inner { background: transparent; }
+.rs-pop .day.rs-dis { opacity: .3; pointer-events: none; }
+.rs-timerow {
+	display: flex; align-items: center; justify-content: space-between;
+	padding: 5px; line-height: 1.5;
+}
+.rs-timetoggle { display: flex; gap: 6px; align-items: center; }
+.rs-timelbl { font-size: 13px; cursor: pointer; }
+.rs-time {
+	background: transparent; color: inherit; font-family: inherit;
+	border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 1px 4px;
+}
+.rs-addend { cursor: pointer; font-size: var(--text-size-smaller); }
+/* end-date mode is ARMED: the next day click picks the end, and the control
+ * must say so — silently arming the mode looked exactly like a dead button */
+.rs-addend.rs-armed {
+	color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+	font-weight: 600;
+}
+.rs-foot {
+	display: flex; align-items: center; justify-content: space-between; gap: 10px;
+	padding: 7px 12px; border-top: 1px solid rgba(127,127,127,.18);
+	margin-top: 4px;
+}
+.rs-result { font-weight: 600; }
+.rs-result.rs-bad { opacity: .5; font-weight: 400; }
+.rs-reprow {
+	display: flex; align-items: center; justify-content: space-between; gap: 10px;
+	padding: 5px 7px; line-height: 1.5; cursor: pointer; border-radius: 6px;
+	margin: 0 5px;
+}
+.rs-reprow:hover { background: rgba(127,127,127,.16); }
+/* right-aligned so a long value ("Every 2 years after completion") wraps away
+ * from the Repeat label instead of mashing into it */
+.rs-repval { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-size-smaller); text-align: right; }
+.rs-repnow {
+	padding: 2px 8px; border-radius: 4px;
+	border: 1px solid rgba(127,127,127,.3);
+	background: var(--ed-button-bg, transparent);
+}
+.rs-reprow:hover .rs-repnow { background: rgba(127,127,127,.22); }
+/* Never stays quiet; a real rule lights up so it reads at a glance. The accent
+ * is mixed 60/40 with the theme's TEXT colour, which darkens it on light
+ * themes and lightens it on dark ones — --color-primary-500 alone washed out
+ * in light mode. The set chip keeps an accent-tinted background on hover too,
+ * because the grey hover plate made the value harder to read. */
+.rs-repnow.rs-set {
+	color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+	border-color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+	background: color-mix(in srgb, var(--color-primary-500, #3aa37f) 12%, transparent);
+	font-weight: 600;
+}
+.rs-reprow:hover .rs-repnow.rs-set { background: color-mix(in srgb, var(--color-primary-500, #3aa37f) 20%, transparent); }
+/* fixed and parented to <body>: .rs-pop has overflow:hidden, so a menu inside
+ * it gets guillotined at the edge (Parham hit exactly that) */
+.rs-repmenu {
+	position: fixed; z-index: 100000; min-width: 170px;
+	/* a whisper off the surface so the menu never melts into it: 7% of the
+	 * fg mixed into the bg = slightly lighter on dark themes, slightly
+	 * darker on light ones (his call — subtle, not loud). 4px = the radius
+	 * standard. */
+	background: var(--rs-menu-bg, #2A2A31); /* set at load: his exact hex on dark themes, a safe mix on light */
+	border: 1px solid rgba(127,127,127,.4); border-radius: 4px;
+	box-shadow: 0 10px 30px rgba(0,0,0,.5); padding: 4px; overflow: hidden;
+	font-size: 13px;
+	/* a touch off pure fg — full white popped too hard (his call) */
+	color: var(--rs-menu-fg, #D5D4D4); /* set at load: his exact hex on dark, theme fg on light */
+}
+.rs-repmenu div { padding: 5px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.rs-repmenu > div[data-v]:hover { background: rgba(127,127,127,.2); } /* real menu ROWS only — never the datepicker wrapper or its cells */
+.rs-repmenu div.rs-on { color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor)); font-weight: 600; }
+.rs-custom { padding: 8px 12px 10px; border-top: 1px solid rgba(127,127,127,.18); }
+.rs-custom label { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-width: 0; }
+.rs-custom label span:first-child { opacity: .6; min-width: 118px; flex: 0 0 auto; }
+/* long chip values ("Lay Out All Occurrences") must ellipsize INSIDE the
+ * box, never poke out of it — the full text is always visible in the menu.
+ * min-width:0 must sit on the LABEL SPAN too: it is itself a flex item of
+ * the inline-flex chip, and its default min-width:auto blocked the shrink
+ * (his second overflow report — the chip-level rule alone was not enough) */
+.rs-custom .rs-sel { min-width: 0; max-width: 100%; }
+/* the HARD CAP is what actually truncates: flex min-width alone let the
+ * label keep its full width and the text ran to the box edge (his two
+ * reports; live-measured — scrollWidth==clientWidth, no ellipsis) */
+.rs-custom .rs-sel .rs-sel-lbl { min-width: 0; max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-custom input {
+	background: transparent; color: inherit; font-family: inherit; font-size: 13px;
+	border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 3px 7px;
+}
+.rs-custom .rs-int { width: 52px; }
+/* the unit label sits in the BOX, not in a menu — using the menu foreground
+ * made it near-invisible on light themes (his report: "day" barely readable
+ * on white). Box text colour, quietened by opacity, works in both. */
+.rs-unit { color: inherit; opacity: .55; }
+.rs-custom .rs-until { width: 132px; }
+.rs-until.rs-bad-date { border-color: rgba(220,90,90,.7); }
+.rs-cnt {
+	width: 46px; background: transparent; color: inherit; font-family: inherit; font-size: 13px;
+	border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 1px 4px;
+}
+/* the Name Copies popover: template field + token hint + live preview */
+.rs-namepop { padding: 11px 12px; width: 318px; }
+/* PROGRESS BAR COLOURS, theme-scoped so no JS is involved. The fill no
+ * longer mixes with --text-color: that mix BRIGHTENED the accent on dark
+ * themes and darkened it on light ones (measured: fill luma 180 in dark),
+ * which is why the bar read minty. Dark themes get his pick, "variant D" —
+ * accent knocked 15% toward black against an almost-black track (fill 151,
+ * track 22). Light themes keep the plain accent, where a black mix would
+ * read heavy. */
+:root {
+	--rs-prog-fill: var(--color-primary-500, #3aa37f);
+	--rs-prog-track: color-mix(in srgb, var(--text-color) 16%, transparent);
+}
+html.is-dark {
+	--rs-prog-fill: color-mix(in srgb, var(--color-primary-500, #3aa37f) 85%, #000);
+	/* the track stays at the original 16%: variant D's 7% took the unfilled
+	 * half almost down to the page background and it stopped reading as a
+	 * bar at all (his report). Only the FILL was meant to get darker. */
+	--rs-prog-track: color-mix(in srgb, var(--text-color) 16%, transparent);
+}
+.rs-namepop input {
+	width: 100%; box-sizing: border-box;
+	background: transparent; color: inherit; font-family: inherit; font-size: 13px;
+	border: 1px solid rgba(127,127,127,.35); border-radius: 4px; padding: 3px 7px;
+}
+/* neutralize the menu-row styling the popover's divs inherit from
+ * .rs-repmenu div (nowrap was clipping the preview text) */
+.rs-namepop div { padding: 0; border-radius: 0; cursor: default; white-space: normal; }
+/* the token legend, rebuilt to HIS mock (2026-08-10): bordered chips in a
+ * two-column grid, token first + a muted example after, hairline under the
+ * field, 4px radius everywhere; hovering lights the chip in the accent */
+.rs-name-sep { border-top: 1px solid rgba(127,127,127,.22); margin: 9px 0; }
+.rs-name-hint { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; font-size: 12px; }
+.rs-namepop .rs-tokrow {
+	display: flex; align-items: baseline; gap: 6px; min-width: 0;
+	border: 1px solid rgba(127,127,127,.3); border-radius: 4px;
+	padding: 4px 9px; cursor: pointer; white-space: nowrap;
+}
+.rs-namepop .rs-tokrow:hover,
+.rs-namepop .rs-tokrow.is-on {
+	border-color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+}
+.rs-namepop .rs-tokrow:hover .rs-tok-t,
+.rs-namepop .rs-tokrow.is-on .rs-tok-t { color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor)); }
+.rs-tok-t { flex: 0 0 auto; }
+.rs-tok-l { opacity: .5; overflow: hidden; text-overflow: ellipsis; }
+.rs-name-off { font-size: 11px; opacity: .45; margin-top: 9px; }
+/* the live preview sits UNDER THE FIELD (his mock), one example on the
+ * generic "Title of Page" stand-in; the chips grid follows it */
+.rs-name-prev { font-size: 12px; opacity: .7; margin-bottom: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-name .rs-sel-lbl { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* HIS DRAWN SPEC (2026-08-09), with the plugin owning EVERY dimension —
+ * the app's compact-picker cells carry fixed sizes and a fixed grid height
+ * that overflowed and clipped anything responsive. Exact arithmetic:
+ * 7×30px columns + 6×2px gaps = 222; box = 16 + 222 + 16 = 254. Equal
+ * padding on all sides by construction; month nudged right; near-square. */
+.rs-minical { width: 254px; } /* provisional — squareUp() measures the render and sets the exact square + equal air */
+/* THE root cause of six skewed rounds, read straight from appui.css:
+ * .datepicker-compact ships padding-left:10px + padding-right:20px, and its
+ * header another 5px — every layout attempt inherited that tilt. Zero them. */
+.rs-minical .datepicker-wrapper { width: auto; padding: 0; }
+.rs-minical .datepicker-calendar { width: auto; padding: 0; }
+.rs-minical .datepicker-header { display: flex; align-items: center; padding: 0 0 0 4px; margin-bottom: 10px; }
+.rs-minical .datepicker-weekdays,
+.rs-minical .datepicker-days {
+	display: grid; grid-template-columns: repeat(7, 25px);
+	gap: 3px 2px; width: max-content; height: auto; min-height: 0;
+	margin: 0 auto;
+}
+.rs-minical .datepicker-weekdays { margin-bottom: 7px; }
+.rs-minical .weekday { width: 25px; text-align: center; padding: 0; font-size: 11px; }
+.rs-minical .day {
+	width: 25px; height: 22px; margin: 0; padding: 0;
+	display: flex; align-items: center; justify-content: center;
+}
+.rs-minical .day .day-inner { font-size: 12px; width: 18px; height: 18px; padding: 2px; }
+.rs-minical .current-month { font-size: 13px; }
+.rs-mc-nav { cursor: pointer; padding: 0 9px; opacity: .55; user-select: none; }
+.rs-mc-nav:hover { opacity: 1; }
+.rs-custom input[type="radio"], .rs-custom input[type="checkbox"] {
+	border: none; padding: 0; width: auto;
+	accent-color: var(--color-primary-500, #3aa37f);
+}
+/* the day / month-day / month grids: multi-select toggle cells */
+.rs-days, .rs-mdays, .rs-months { display: grid; gap: 3px; margin: 3px 0 5px; }
+.rs-days { grid-template-columns: repeat(7, 1fr); }
+.rs-mdays { grid-template-columns: repeat(7, 1fr); }
+.rs-months { grid-template-columns: repeat(4, 1fr); }
+.rs-cell {
+	text-align: center; padding: 2px 0; border-radius: 4px; cursor: pointer;
+	user-select: none; border: 1px solid rgba(127,127,127,.25);
+}
+.rs-cell:hover { background: rgba(127,127,127,.16); }
+.rs-cell.is-on {
+	color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+	border-color: color-mix(in srgb, var(--color-primary-500, #3aa37f) 60%, var(--text-color, currentColor));
+	background: color-mix(in srgb, var(--color-primary-500, #3aa37f) 14%, transparent);
+	font-weight: 600;
+}
+.rs-ordrow { display: flex; gap: 6px; padding: 2px 0 4px 22px; }
+/* the half of the monthly/yearly choice that is not active, greyed like Apple */
+.rs-dim { opacity: .4; pointer-events: none; }
+/* Plugin-drawn dropdowns replace the native <select>: the macOS menu renders
+ * at the SYSTEM font size (unstylable, reported too small) and can close
+ * without firing change, stranding focus outside the box — the original
+ * Enter-dead bug. Our own menu keeps typography, focus and keys in-house. */
+.rs-sel {
+	display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+	font-size: 13px; padding: 3px 8px; border-radius: 4px; /* the 4px standard */
+	border: 1px solid rgba(127,127,127,.35);
+}
+.rs-sel:hover { background: rgba(127,127,127,.16); }
+.rs-sel .ti-chevron-down { opacity: .5; font-size: .85em; }
+/* TOUCH: a tap on a day only SELECTS it, so a finger has no way to commit —
+   Enter and the double click are both mouse-and-keyboard affordances. Save and
+   Clear go BELOW the footer, full width: the box keeps its own width, and an
+   expanded Repeat panel pushes them down instead of past them. */
+.rs-tbtns { display: none; flex-direction: column; gap: 8px; padding: 0 10px 10px; }
+.rs-pop.rs-touch .rs-tbtns { display: flex; }
+/* the footer's own Clear would come back on the next show() (it toggles inline
+   display), so the touch shape takes it out in CSS, where nothing overrides it */
+.rs-pop.rs-touch .rs-foot .rs-clear { display: none !important; }
+.rs-tbtn {
+	height: 44px; display: flex; align-items: center; justify-content: center;
+	border-radius: 4px; font-size: 13.3px; font-weight: 600; letter-spacing: .02em;
+	cursor: pointer; user-select: none;
+}
+.rs-tsave { background: var(--button-primary-bg-color, #4caea1); color: light-dark(#fff, #0f0f11); }
+/* Thymer's OWN red (the enum chip pair), not a pure signal red: it reads as
+   destructive without outshouting Save, and it follows the theme both ways. */
+.rs-tclear { background: var(--enum-red-bg, #3d2a30); color: var(--enum-red-fg, #e8a0a8); }
+.rs-clear {
+	cursor: pointer; font-size: 13px; white-space: nowrap;
+	padding: 3px 9px; border-radius: 5px;
+	border: 1px solid rgba(127,127,127,.3);
+}
+.rs-clear:hover { background: rgba(127,127,127,.2); }
+/* >>>SHARED date-box CSS */
+`;
+
 class Plugin extends AppPlugin {
 
 	// Longest query text kept as a title suggestion before it gets truncated.
@@ -737,6 +2219,8 @@ class Plugin extends AppPlugin {
 		if (this._onFieldInput) document.removeEventListener("input", this._onFieldInput, true);
 		document.removeEventListener("focusout", this._onFieldFocus, true);
 		document.querySelectorAll(".ssq-chips").forEach((c) => c.remove());
+		if (this._ssdb && this._ssdb.pop) try { this._ssdb.closePicker(); } catch (e) {}
+		document.querySelectorAll("style[data-ssdb]").forEach((x) => x.remove());
 		if (this._onQNudge) {
 			window.removeEventListener("scroll", this._onQNudge, true);
 			window.removeEventListener("resize", this._onQNudge);
@@ -1946,7 +3430,7 @@ class Plugin extends AppPlugin {
 		// Escape releases a selected group before anything else closes. (Tab no
 		// longer indents: hijacking it broke tabbing between the columns — his
 		// report 2026-08-14. Indent/outdent are the arrows on the group's box.)
-		if (this._qb && this._qb.sel && !this._qbMenuEl && !this._qbCalEl && !this._qbRsCalOpen() && !this._qb.naming) {
+		if (this._qb && this._qb.sel && !this._qbMenuEl && !this._qbRsCalOpen() && !this._qb.naming) {
 			if (e.key === "Escape") {
 				e.preventDefault(); e.stopPropagation();
 				this._qb.sel = null;
@@ -1960,7 +3444,7 @@ class Plugin extends AppPlugin {
 		// there the arrows belong to the list, which is why this sits behind the
 		// same guards. In a TEXT field the caret keeps left/right until it sits
 		// at the very edge of the text, the way a spreadsheet cell behaves.
-		if (this._qb && this._qbEl && !this._qbMenuEl && !this._qbCalEl && !this._qbRsCalOpen() && !this._qb.naming
+		if (this._qb && this._qbEl && !this._qbMenuEl && !this._qbRsCalOpen() && !this._qb.naming
 			&& !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
 			&& /^Arrow(Left|Right|Up|Down)$/.test(e.key)) {
 			const ae = document.activeElement;
@@ -1990,7 +3474,7 @@ class Plugin extends AppPlugin {
 		// NOT in a text field — inside a value box ⌘C must stay the ordinary copy.
 		// ⌘⇧C / ⌘⇧V land here too (`e.key` is the capital then), so whichever of
 		// the pair survives Electron's Edit menu works.
-		if (this._qb && this._qbEl && !this._qbMenuEl && !this._qbCalEl && !this._qbRsCalOpen() && !this._qb.naming
+		if (this._qb && this._qbEl && !this._qbMenuEl && !this._qbRsCalOpen() && !this._qb.naming
 			&& (e.metaKey || e.ctrlKey) && !e.altKey) {
 			const ae = document.activeElement;
 			const typing = !!(ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable));
@@ -2009,7 +3493,7 @@ class Plugin extends AppPlugin {
 		if (e.key === "Escape" && this._qb) {
 			if (this._qbMenuEl) return;          // the menu's own handler closes it
 			if (this._qbHelpPop) { e.preventDefault(); e.stopPropagation(); this._qbCloseHelp(); return; }
-			if (this._qbCalEl || this._qbRsCalOpen()) {
+			if (this._qbRsCalOpen()) {
 				// Handled here rather than on the calendar's input, which only sees the
 				// key while it holds focus — click a day cell first and Escape was dead.
 				// (Supertask's calendar too: Escape closes it, never the builder.)
@@ -3627,171 +5111,71 @@ class Plugin extends AppPlugin {
 	}
 
 	_qbCloseCal() {
-		if (this._qbCalOutside) { document.removeEventListener("mousedown", this._qbCalOutside, true); this._qbCalOutside = null; }
-		if (this._qbCalEl) { this._qbCalEl.remove(); this._qbCalEl = null; }
 		const rs = this._qbRsCal;
 		this._qbRsCal = null;
 		if (typeof rs === "function") try { rs(); } catch (e) {}
 	}
 
-	// Supertask's date box or calendar is open (its own element, outside the builder).
-	_qbRsCalOpen() { return !!this._qbRsCal && !!document.querySelector(".rs-pop, .rs-minical"); }
+	// A date box is open (Supertask's or our copy of it; its own element, outside the builder).
+	_qbRsCalOpen() { return !!this._qbRsCal && !!document.querySelector(".rs-pop"); }
 
 	_qbOpenCal(anchor, current, onPick, label) {
 		this._qbCloseCal();
-		// Every date field opens SUPERTASK'S date box when Supertask is installed (his
-		// rule, and his correction 2026-10-11: the box you can TYPE a date into in
-		// natural language, not the bare calendar). Contract `__rsDateBox.pickField`
-		// (anchor, {ymd, time}, onPick, {label}): writes nothing, onPick gets
-		// {ymd, time} or null for Clear, returns a close function. An older
-		// Supertask only has the bare calendar (`pick`); without Supertask, the
-		// builder's own calendar below.
-		const rs = window.__rsDateBox;
-		const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}:\d{2}))?$/.exec((current || "").trim());
+		// Every date field opens SUPERTASK'S date box, the one you can TYPE a date into
+		// in natural language (his rule; his correction 2026-10-11). With a Supertask
+		// that offers it for a field (`__rsDateBox.pickField`), its own box opens; else
+		// this plugin's copy of the same box (SsDateBox, generated from Supertask by
+		// tools/sync-datebox.py; his call 2026-10-29: it must work without Supertask).
+		// Either way: nothing is written, onPick gets "YYYY-MM-DD[ HH:MM]" or "" (Clear).
+		const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec((current || "").trim());
 		const pad = (n) => String(n).padStart(2, "0");
 		const ymdIso = (n) => Math.floor(n / 10000) + "-" + pad(Math.floor(n / 100) % 100) + "-" + pad(n % 100);
+		this._qbFocusAfter = this._qbControlRef(anchor);
+		const rs = this._rsBox();
 		if (rs && rs.contract === 1 && typeof rs.pickField === "function") {
 			try {
-				this._qbFocusAfter = this._qbControlRef(anchor);
-				this._qbRsCal = rs.pickField(anchor, m ? { ymd: +m[1] * 10000 + +m[2] * 100 + +m[3], time: m[4] || null } : null, (v) => {
+				this._qbRsCal = rs.pickField(anchor, m ? { ymd: +m[1] * 10000 + +m[2] * 100 + +m[3], time: m[4] ? m[4] + ":" + m[5] : null } : null, (v) => {
 					this._qbRsCal = null;
 					onPick(v ? ymdIso(v.ymd) + (v.time ? " " + v.time : "") : "");
 				}, { label: label || "Date" });
 				return;
-			} catch (e) { this._qbRsCal = null; /* fall back */ }
+			} catch (e) { this._qbRsCal = null; /* fall back to our copy */ }
 		}
-		if (rs && rs.contract === 1 && typeof rs.pick === "function") {
-			try {
-				this._qbFocusAfter = this._qbControlRef(anchor);
-				this._qbRsCal = rs.pick(anchor, m ? +m[1] * 10000 + +m[2] * 100 + +m[3] : 0, (n) => {
-					this._qbRsCal = null;
-					onPick(ymdIso(n) + (m && m[4] ? " " + m[4] : ""));
-				});
-				return;
-			} catch (e) { this._qbRsCal = null; /* fall back to our own */ }
-		}
-		// Same reason as the menus: hand focus back to the date control afterwards so
-		// Tab continues from there.
-		this._qbFocusAfter = this._qbControlRef(anchor.querySelector ? (anchor.querySelector(".qb-val-date") || anchor) : anchor);
-		const DOW = ["M", "T", "W", "T", "F", "S", "S"];
-		const box = document.createElement("div");
-		box.className = "qb-cal";
-		box.addEventListener("mousedown", (e) => e.stopPropagation());
-
-		// Preselect the value already set, else TODAY — so opening the picker and
-		// pressing Enter takes today without touching the mouse (Supertask's rule).
-		const now = new Date();
-		const cur = (current || "").trim();
-		const mIso = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec(cur);
-		let sel = mIso ? new Date(+mIso[1], +mIso[2] - 1, +mIso[3]) : new Date(now);
-		let time = mIso && mIso[4] ? mIso[4] + ":" + mIso[5] : "";
-		let vy = sel.getFullYear(), vm = sel.getMonth();
-		const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-		const commit = () => onPick(iso(sel) + (time ? " " + time : ""));
-
-		// The switch is Thymer's OWN element (`input-switch`, `.switch-compact`), the
-		// same one Supertask's date picker uses — it carries `.checked` and fires
-		// `change` exactly like a checkbox, so nothing else here changes. A raw
-		// checkbox sat here before and read as a stray browser control.
-		box.innerHTML = '<input class="qb-cal-input" type="text" spellcheck="false">'
-			+ '<div class="qb-cal-body"></div>'
-			+ '<div class="qb-cal-foot">'
-			+   '<div class="qb-cal-timetoggle">'
-			+     '<input-switch class="qb-cal-tswitch switch-compact"></input-switch>'
-			+     '<span class="qb-cal-timelbl">Set time</span>'
-			+   '</div>'
-			+   '<input class="qb-cal-time" type="time" style="display:none">'
-			+   '<span class="qb-cal-clear ti ti-x" title="Clear"></span>'
-			+ '</div>';
-		const input = box.querySelector(".qb-cal-input");
-		const body = box.querySelector(".qb-cal-body");
-		const tsw = box.querySelector(".qb-cal-tswitch");
-		const tin = box.querySelector(".qb-cal-time");
-
-		const paint = () => {
-			const first = new Date(vy, vm, 1);
-			const lead = (first.getDay() + 6) % 7;   // Monday-first, like Thymer
-			const selYmd = sel.getFullYear() * 10000 + (sel.getMonth() + 1) * 100 + sel.getDate();
-			let days = "";
-			for (let i = 0; i < 42; i++) {
-				const d = new Date(vy, vm, 1 - lead + i);
-				const ymd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-				const cls = ["day", d.getMonth() === vm ? "current-month" : (d < first ? "prev-month" : "next-month")];
-				if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) cls.push("today");
-				if (ymd === selYmd) cls.push("selected");
-				days += '<div class="' + cls.join(" ") + '" data-iso="' + iso(d) + '"><span class="day-inner">' + d.getDate() + "</span></div>";
-			}
-			body.innerHTML = '<div class="datepicker-wrapper datepicker-compact"><div class="datepicker-calendar">'
-				+ '<div class="datepicker-header"><span class="current-month" style="flex:1">'
-				+ new Date(vy, vm, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
-				+ '</span><span class="qb-cal-nav qb-cal-prev">‹</span><span class="qb-cal-nav qb-cal-next">›</span></div>'
-				+ '<div class="datepicker-weekdays">' + DOW.map((d) => '<div class="weekday">' + d + "</div>").join("") + "</div>"
-				+ '<div class="datepicker-days">' + days + "</div>"
-				+ "</div></div>";
-			body.querySelector(".qb-cal-prev").addEventListener("click", (e) => { e.stopPropagation(); vm--; if (vm < 0) { vm = 11; vy--; } paint(); });
-			body.querySelector(".qb-cal-next").addEventListener("click", (e) => { e.stopPropagation(); vm++; if (vm > 11) { vm = 0; vy++; } paint(); });
-			body.querySelectorAll(".datepicker-days .day").forEach((c) => {
-				c.addEventListener("click", (e) => {
-					e.stopPropagation();
-					const v = c.getAttribute("data-iso");
-					sel = new Date(v + "T00:00:00");
-					this._qbCloseCal(); commit();
-				});
-			});
+		this._ssdbCss();
+		const box = this._ssdb || (this._ssdb = new SsDateBox());
+		const cur = m ? (m[4] ? DateTime.dateAndTime(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0) : DateTime.dateOnly(+m[1], +m[2] - 1, +m[3])) : null;
+		const t = {
+			kind: "field", anchorEl: anchor, cur, label: label || "Date",
+			onPick: (dt) => {
+				this._qbRsCal = null;
+				if (!dt) { onPick(""); return; }
+				const p = dt.getParts();
+				onPick(ymdIso(p.year * 10000 + (p.month + 1) * 100 + p.day)
+					+ (p.hours !== undefined ? " " + pad(p.hours) + ":" + pad(p.minutes || 0) : ""));
+			},
 		};
+		box.openPicker(t);
+		const pop = box.pop;
+		if (!pop) return;
+		// a query value has no repeat and no end date
+		for (const sel of [".rs-reprow", ".rs-addend"]) { const el = pop.querySelector(sel); if (el) el.style.display = "none"; }
+		box.place(pop, t);
+		this._qbRsCal = () => { if (box.pop === pop) box.closePicker(); };
+	}
 
-		// Natural language, through Thymer's OWN parser — "tomorrow", "next monday",
-		// "aug 1", "monday 3pm" all resolve, and a parsed time flips the switch on.
-		input.placeholder = sel.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-		input.addEventListener("keydown", (e) => {
-			e.stopPropagation();
-			if (e.key === "Enter") { e.preventDefault(); this._qbCloseCal(); commit(); }
-			else if (e.key === "Escape") { e.preventDefault(); this._qbCloseCal(); }
-		});
-		input.addEventListener("input", () => {
-			const raw = input.value.trim();
-			if (!raw) return;
-			let parsed = null;
-			try { parsed = (typeof DateTime !== "undefined") ? DateTime.parseDateTimeString(raw) : null; } catch (err) { parsed = null; }
-			if (!parsed) return;
-			const pp = parsed.getParts ? parsed.getParts() : null;
-			if (!pp || pp.year === undefined) return;
-			sel = new Date(pp.year, pp.month, pp.day);
-			vy = pp.year; vm = pp.month;
-			if (pp.hours !== undefined) {
-				tsw.checked = true; tin.style.display = "";
-				tin.value = String(pp.hours).padStart(2, "0") + ":" + String(pp.minutes || 0).padStart(2, "0");
-				time = tin.value;
-			}
-			paint();
-		});
+	// Supertask's published date box, if it is installed (one place to read it).
+	_rsBox() { return window.__rsDateBox || null; }
 
-		if (time) { tsw.checked = true; tin.style.display = ""; tin.value = time; }
-		tsw.addEventListener("change", (e) => {
-			e.stopPropagation();
-			tin.style.display = tsw.checked ? "" : "none";
-			if (!tsw.checked) time = "";
-			else if (!tin.value) { tin.value = "09:00"; time = tin.value; }
-		});
-		// The label is part of the switch, as in Supertask.
-		box.querySelector(".qb-cal-timelbl").addEventListener("click", (e) => {
-			e.stopPropagation();
-			tsw.checked = !tsw.checked;
-			tsw.dispatchEvent(new Event("change"));
-		});
-		tin.addEventListener("input", (e) => { e.stopPropagation(); time = tin.value; });
-		box.querySelector(".qb-cal-clear").addEventListener("click", (e) => { e.stopPropagation(); this._qbCloseCal(); onPick(""); });
-
-		paint();
-		document.body.appendChild(box);
-		const r = anchor.getBoundingClientRect(), M = 8;
-		const w = box.offsetWidth, h = box.offsetHeight;
-		box.style.left = Math.max(M, Math.min(r.right - w, window.innerWidth - w - M)) + "px";
-		box.style.top = (r.bottom + 4 + h > window.innerHeight - M ? Math.max(M, r.top - 4 - h) : r.bottom + 4) + "px";
-		this._qbCalEl = box;
-		input.focus();
-		this._qbCalOutside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) this._qbCloseCal(); };
-		document.addEventListener("mousedown", this._qbCalOutside, true);
+	// The copy's stylesheet, only while Supertask is absent: Supertask's own rules
+	// style the same classes, and an older copy of them must never restyle its box.
+	_ssdbCss() {
+		const mine = document.querySelector("style[data-ssdb]");
+		if (this._rsBox()) { if (mine) mine.remove(); return; }
+		if (mine) return;
+		const st = document.createElement("style");
+		st.setAttribute("data-ssdb", "");
+		st.textContent = SSDB_CSS;
+		document.head.appendChild(st);
 	}
 
 	// Which collection does a record ("page link") property point at? The schema DOES
