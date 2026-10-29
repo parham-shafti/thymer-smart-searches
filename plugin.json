@@ -1,7 +1,7 @@
 {
 	"ver": 1,
-	"version": "1.2.0",
-	"name": "Saved Searches",
+	"version": "2.0.0",
+	"name": "Smart Searches",
 	"icon": "ti-bookmark",
-	"description": "Save the queries you type into a collection view's filter field under a title, and re-run them from a bookmark button in the view toolbar."
+	"description": "Build a collection view's filter in a visual query builder, save it under a name, and see saved searches as chips in the filter field."
 }

@@ -762,6 +762,33 @@ console.log('\nconfig writes — one per revision');
 	delete globalThis.window; delete globalThis.document;
 }
 
+// One origin, many workspaces (2026-10-29): a new install in a second workspace
+// read the first workspace's local copy (one unscoped key) and wrote it into its
+// own config. Each install reads only the copy under its own guid.
+console.log('\nlocal copy — one per install');
+{
+	const store = { ssq_savedSearches: JSON.stringify({ rev: 999, items: [{ id: 'x', title: 'Other workspace', query: 'y' }] }) };
+	globalThis.window = { localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } } };
+	globalThis.document = { querySelectorAll: () => [] };
+	const fresh = new Plugin();
+	fresh.getConfiguration = () => ({ custom: {} });
+	fresh.getGuid = () => 'NEW';
+	check('a fresh install ignores the unscoped copy', fresh._items().length, 0);
+	check('...and owes no write', !!fresh._dirty, false);
+	const a = new Plugin();
+	a.getConfiguration = () => ({ custom: { savedSearches: [{ id: 'a', title: 'A', query: 'q' }], savedSearchesRev: 5 } });
+	a.getGuid = () => 'A';
+	a._repaintButtons = () => {}; a._chipSyncAll = () => {};
+	a._items(); a._touch();
+	check('a write lands under its own guid', JSON.parse(store['ssq_savedSearches:A']).items[0].title, 'A');
+	check('...and leaves the unscoped copy alone', JSON.parse(store.ssq_savedSearches).items[0].title, 'Other workspace');
+	const b = new Plugin();
+	b.getConfiguration = () => ({ custom: {} });
+	b.getGuid = () => 'B';
+	check('another install does not see it', b._items().length, 0);
+	delete globalThis.window; delete globalThis.document;
+}
+
 console.log('\nempty input');
 check('empty query yields no model', String(p._qbParse('')), 'null');
 check('empty model compiles to nothing', p._qbCompile(p._qbNormalize({})), '');

@@ -1,5 +1,5 @@
 /**
- * Saved Searches — save the queries you type into a collection view's filter
+ * Smart Searches — save the queries you type into a collection view's filter
  * field, give each one a title, and re-run it from a bookmark button in the
  * view's toolbar.
  *
@@ -374,12 +374,14 @@ const CSS = `
 }
 .autocomplete--option-selected .qb-lib-act, .autocomplete--option-selected .qb-lib-grip { visibility: visible; }
 .qb-lib-act:hover { opacity: 1; background: rgba(255,255,255,.15); }
+html.is-light .qb-lib-act:hover { background: rgba(0,0,0,.08); }
 .qb-lib-grip { cursor: grab; opacity: .6; }
 .autocomplete--option-selected .qb-lib-grip.qb-lib-grip-off { visibility: hidden; }
 .qb-lib-rename {
 	flex: 1 1 auto; min-width: 0; height: 22px; padding: 0 6px; border-radius: 4px; outline: none;
 	font: inherit; color: inherit; background: transparent; border: 1px solid rgba(255,255,255,.45);
 }
+html.is-light .qb-lib-rename { border-color: rgba(0,0,0,.3); }
 .qb-lib-dragging { opacity: .35; }
 .qb-lib-dropline { height: 2px; margin: 0 10px; border-radius: 1px; background: var(--color-primary-500, var(--ed-button-primary-bg, #4caea1)); }
 .qb-lib-foot { border-top: 1px solid rgba(127,127,127,.18); margin-top: 4px; padding-top: 4px; }
@@ -423,6 +425,11 @@ const CSS = `
 .qb-menu.qb-menu-dark .autocomplete--option:hover { background: #3B3B42; }
 .qb-menu.qb-menu-dark .autocomplete--option-selected,
 .qb-menu.qb-menu-dark .autocomplete--option-selected:hover { background: #313E44; color: var(--ed-button-primary-bg, #4caea1); }
+/* The same menu on a light theme: the palette above is dark-only. */
+html.is-light .qb-menu.qb-menu-dark .autocomplete--option { color: color-mix(in srgb, var(--text-color, #222) 65%, transparent); }
+html.is-light .qb-menu.qb-menu-dark .autocomplete--option:hover { background: rgba(0,0,0,.06); }
+html.is-light .qb-menu.qb-menu-dark .autocomplete--option-selected,
+html.is-light .qb-menu.qb-menu-dark .autocomplete--option-selected:hover { background: color-mix(in srgb, var(--color-primary-500, #4caea1) 16%, transparent); color: var(--color-primary-500, #4caea1); }
 /* NOT excludes, so it is marked as the destructive choice — in Thymer's own enum
    red rather than a hex, both in the menu and on the control once it is chosen. */
 .qb-menu.qb-menu-dark .autocomplete--option[data-v="NOT"],
@@ -482,6 +489,8 @@ const CSS = `
 	background: #25252A; padding: 10px 12px 2px; margin-bottom: 8px;
 	position: relative;
 }
+/* #25252A is the dark palette; a light theme gets the same step from its own text colour. */
+html.is-light .qb-block { background: color-mix(in srgb, var(--text-color, #222) 4%, transparent); }
 /* Collapsible BOXES (his correction of the first fold design: every visible
    group folds to its OWN framed one-liner, never merged into a parent's).
    The chevron lives in a slim gutter on the box's right edge. */
@@ -2127,10 +2136,14 @@ class Plugin extends AppPlugin {
 	static TASKS_COL = "__tasks__";
 
 	onLoad() {
-		// Dev handle for the CDP loop (local build only — strip before any
-		// publish): the plugin instance is otherwise unreachable from the page.
-		window.__ssq = this;
-		window.__ssqGen = (window.__ssqGen || 0) + 1;   // Hot Reload proof: rises on every code load
+		// Dev handle for the CDP loop, only where localStorage holds "ssq_dev":
+		// the plugin instance is otherwise unreachable from the page.
+		try {
+			if (localStorage.getItem("ssq_dev")) {
+				window.__ssq = this;
+				window.__ssqGen = (window.__ssqGen || 0) + 1;   // Hot Reload proof: rises on every code load
+			}
+		} catch (e) {}
 		// The LIVE instance's number. A reload does not always unload the old
 		// instance, and an old one still drawing chips leaves buttons wired to dead
 		// code: an instance that is no longer the live one stops drawing.
@@ -2270,7 +2283,7 @@ class Plugin extends AppPlugin {
 			}
 		} catch (e) { /* config unreadable — localStorage may still have it */ }
 		try {
-			const raw = JSON.parse(window.localStorage.getItem("ssq_savedSearches") || "null");
+			const raw = JSON.parse(window.localStorage.getItem(this._lsKey("ssq_savedSearches")) || "null");
 			if (Array.isArray(raw)) { lItems = raw; lRev = 0; }            // pre-0.2 format
 			else if (raw && Array.isArray(raw.items)) { lItems = raw.items; lRev = raw.rev || 0; }
 		} catch (e) { /* ignore */ }
@@ -2287,12 +2300,17 @@ class Plugin extends AppPlugin {
 		return this._cache;
 	}
 
+	// localStorage is one per origin, shared by every workspace on it, so each
+	// install keeps its copy under its own plugin guid. The unscoped keys of
+	// earlier versions are never read: they may hold another workspace's searches.
+	_lsKey(name) { return name + ":" + this.getGuid(); }
+
 	_touch() {
 		this._dirty = true;
 		this._rev = Date.now();
 		// Also a crash net: the config is only written when the builder closes.
 		try {
-			window.localStorage.setItem("ssq_savedSearches", JSON.stringify({ rev: this._rev, items: this._items() }));
+			window.localStorage.setItem(this._lsKey("ssq_savedSearches"), JSON.stringify({ rev: this._rev, items: this._items() }));
 		} catch (e) {}
 		this._repaintButtons(); // a collection may have gained or lost its first saved search
 		this._chipSyncAll();    // a rename or delete changes what the chips say
@@ -2332,9 +2350,9 @@ class Plugin extends AppPlugin {
 		// that still heals a config a code push rolled back, without the storm.
 		const rev = this._rev || 0;
 		try {
-			const last = JSON.parse(window.localStorage.getItem("ssq_flushed") || "null");
+			const last = JSON.parse(window.localStorage.getItem(this._lsKey("ssq_flushed")) || "null");
 			if (last && last.rev === rev && Date.now() - last.at < 600000) return;
-			window.localStorage.setItem("ssq_flushed", JSON.stringify({ rev, at: Date.now() }));
+			window.localStorage.setItem(this._lsKey("ssq_flushed"), JSON.stringify({ rev, at: Date.now() }));
 		} catch (e) { /* no localStorage: no guard, as before */ }
 		try {
 			const conf = this.getConfiguration() || {};
@@ -2878,7 +2896,7 @@ class Plugin extends AppPlugin {
 				if (input.value.trim() && document.activeElement !== input) this._apply(input, input.value);
 			}
 		} catch (e) {
-			if (!this._healWarned) { this._healWarned = true; console.warn("[Saved Searches] could not check the filter index (Thymer internals moved?)", e); }
+			if (!this._healWarned) { this._healWarned = true; console.warn("[Smart Searches] could not check the filter index (Thymer internals moved?)", e); }
 		} finally {
 			this._healing = false;
 		}
@@ -3237,16 +3255,16 @@ class Plugin extends AppPlugin {
 	async _qBlockApply(guid, q) {
 		try {
 			const rguid = this._qBlockRguid(guid);
-			if (!rguid) { console.warn("[Saved Searches] block has no record"); return false; }
+			if (!rguid) { console.warn("[Smart Searches] block has no record"); return false; }
 			let rec = this.data.getRecord(rguid);
 			if (rec && typeof rec.then === "function") rec = await rec;
-			if (!rec) { console.warn("[Saved Searches] block record not found"); return false; }
+			if (!rec) { console.warn("[Smart Searches] block record not found"); return false; }
 			let items = rec.getLineItems(false);
 			if (items && typeof items.then === "function") items = await items;
 			const li = (items || []).find((x) => {
 				try { return x.guid === guid || (x._getItem && x._getItem().guid === guid); } catch (e) { return false; }
 			});
-			if (!li) { console.warn("[Saved Searches] block line not found on its record"); return false; }
+			if (!li) { console.warn("[Smart Searches] block line not found on its record"); return false; }
 			const w = li.setMetaProperty("filter_expr", q);
 			if (w && typeof w.then === "function") await w;
 			// Re-run exactly as the refresh chip does — reconstruct the helper.
@@ -3268,7 +3286,7 @@ class Plugin extends AppPlugin {
 			return true;
 		} catch (e) {
 			// Never swallow this silently — the mute-catch lesson was paid for once.
-			console.warn("[Saved Searches] applying to the block failed", e);
+			console.warn("[Smart Searches] applying to the block failed", e);
 			return false;
 		}
 	}
@@ -3276,7 +3294,7 @@ class Plugin extends AppPlugin {
 	async _qbOpenBlock(guid) {
 		this._closePopup();
 		this._qbClose(false);
-		await this._qbLoadCollections();
+		await this._qbLoadCollections(true);
 		const q = this._qBlockQuery(guid);
 		const parsed = q ? this._qbParse(q) : null;
 		this._qb = {
@@ -3337,7 +3355,7 @@ class Plugin extends AppPlugin {
 		// enough to be findable, instead of failing mute like last time.
 		if (!this._qLoaderWarned) {
 			this._qLoaderWarned = true;
-			console.warn("[Saved Searches] could not find the live-search refresh method on queryHelper — Thymer's internals moved. The refresh button will stay hidden.");
+			console.warn("[Smart Searches] could not find the live-search refresh method on queryHelper — Thymer's internals moved. The refresh button will stay hidden.");
 		}
 		return null;
 	}
@@ -3394,7 +3412,7 @@ class Plugin extends AppPlugin {
 		} catch (e) {
 			// Never swallow this silently — a mute catch is exactly what hid the
 			// renamed-method bug behind a button that looked like it worked.
-			console.warn("[Saved Searches] refresh failed", e);
+			console.warn("[Smart Searches] refresh failed", e);
 		}
 	}
 
@@ -4546,9 +4564,10 @@ class Plugin extends AppPlugin {
 		});
 	}
 
-	// Collections are read once per session; the picker needs label + fields only.
-	async _qbLoadCollections() {
-		if (this._qbCols) return this._qbCols;
+	// The picker needs label + fields only. Every builder open reads them afresh
+	// (`fresh`), so a property added since the last open is there to pick.
+	async _qbLoadCollections(fresh) {
+		if (this._qbCols && !fresh) return this._qbCols;
 		const out = [];
 		try {
 			let cols = this.data.getAllCollections();
@@ -4581,7 +4600,7 @@ class Plugin extends AppPlugin {
 		// open retry. Nothing is lost when it does happen: a raw chip keeps the
 		// query text byte-exact, which is the reader's standing contract.
 		if (cols.length) this._qbCols = cols;
-		return cols;
+		return this._qbCols || cols;
 	}
 
 	_qbFieldsFor(src) {
@@ -5311,7 +5330,7 @@ class Plugin extends AppPlugin {
 		const input = ctx.input;
 		const btn = this._popBtn;         // anchor the builder where the bookmark is
 		this._closePopup();               // the list makes way for the builder
-		await this._qbLoadCollections();
+		await this._qbLoadCollections(true);
 		// A normal collection defaults every row to itself; a dynamic one (no
 		// matching collection of that name) leaves the source for you to pick.
 		const all = this._qbCols || [];
@@ -5512,10 +5531,10 @@ class Plugin extends AppPlugin {
 		head.className = "qb-head";
 		const ht = document.createElement("div");
 		ht.className = "qb-head-title";
-		ht.textContent = "Query builder";
+		ht.textContent = "Smart Searches";
 		const hs = document.createElement("div");
 		hs.className = "qb-head-sub";
-		// A live query needs no subtitle — "Query builder" carries it (his call;
+		// A live query needs no subtitle: the title carries it (his call;
 		// the feature is named Live Query in the app now, and "on a live search"
 		// was yesterday's name anyway).
 		hs.textContent = this._qb.block ? "" : (this._qb.colName ? "in " + this._qb.colName : "");
@@ -5604,7 +5623,9 @@ class Plugin extends AppPlugin {
 			name.className = "qb-name";
 			name.type = "text";
 			name.placeholder = "Title";
-			name.value = this._qb.title || "";
+			// What was typed survives a rebuild (picking "Show in" redraws the footer).
+			name.value = this._qb.nameDraft != null ? this._qb.nameDraft : (this._qb.title || "");
+			name.addEventListener("input", () => { this._qb.nameDraft = name.value; });
 			name.addEventListener("keydown", (e) => {
 				e.stopPropagation();
 				if (e.key === "Enter") { e.preventDefault(); this._qbSave(name.value); }
@@ -5683,6 +5704,7 @@ class Plugin extends AppPlugin {
 			this._qb.title = item ? item.title : "";
 			this._qb.saveViewId = item ? item.viewId : this._qb.viewId;
 			this._qb.saveViewName = item ? (item.viewName || "") : this._qb.viewName;
+			this._qb.nameDraft = null;
 			this._qb.naming = true;
 			this._qbBuild();
 		});
