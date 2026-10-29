@@ -4779,7 +4779,8 @@ class Plugin extends AppPlugin {
 				lb.className = "autocomplete--option-label";
 				lb.textContent = it.label;
 				row.appendChild(lb);
-				row.addEventListener("mouseenter", () => highlight(cells.indexOf(row), false));
+				// Mouse only, as in the library: an emulated mouseenter on a phone must not move the highlight.
+				row.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") highlight(cells.indexOf(row), false); });
 				row.addEventListener("click", (e) => {
 					e.stopPropagation();
 					this._qbCloseMenu();
@@ -6394,7 +6395,10 @@ class Plugin extends AppPlugin {
 			const v = this._qbEl && this._qbEl.querySelector('.qb-row[data-row="' + path + '"] .qb-val, .qb-row[data-row="' + path + '"] .qb-val-sel');
 			if (v) v.focus();
 		};
-		newRow.addEventListener("mouseenter", () => highlight(cells.indexOf(newRow), false));
+		// Hover highlights for a MOUSE only. On a phone the browser sends an emulated
+		// mouseenter before the click; highlighting then shows the row's actions, and
+		// iOS takes that as a hover state and drops the click (two taps to pick).
+		newRow.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") highlight(cells.indexOf(newRow), false); });
 		newRow.addEventListener("click", (e) => { e.stopPropagation(); startNew(); });
 
 		const folds = this._folds();
@@ -6532,7 +6536,7 @@ class Plugin extends AppPlugin {
 						}
 						row.appendChild(grip);
 					}
-					row.addEventListener("mouseenter", () => highlight(cells.indexOf(row), false));
+					row.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") highlight(cells.indexOf(row), false); });
 					row.addEventListener("click", (e) => {
 						e.stopPropagation();
 						if (renaming || Date.now() < (this._suppressClickUntil || 0)) return;
